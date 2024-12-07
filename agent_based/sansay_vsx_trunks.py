@@ -13,7 +13,7 @@ Example output from special agent:
 {
     1: {
         'recid': 1,
-        'alias': 'ATL-PHL VSXs',
+        'alias': 'Trunk VSXs',
         'realtime_stat': {'numOrig': 0,'numTerm': 0,'cps': 0,'numPeak': 0,'totalCLZ': 0,'numCLZCps': 0,'totalLimit': 0,'cpsLimit': 0},
         'calculated_stats': {
             'ingress': {'avg_postdial_delay': 0,'avg_call_duration': 0,'failed_call_ratio': 0,'answer_seize_ratio': 0},
@@ -23,7 +23,7 @@ Example output from special agent:
     },
     10003: {
         'recid': 2,
-        'alias': 'MS OC - Test',
+        'alias': 'Trunk - Test',
         'realtime_stat': {'numOrig': 0,'numTerm': 0,'cps': 0,'numPeak': 0,'totalCLZ': 0, 'numCLZCps': 0, 'totalLimit': 0, 'cpsLimit': 0},
         'calculated_stats': {
             'ingress': {'avg_postdial_delay': 0,'avg_call_duration': 0,'failed_call_ratio': 0,'answer_seize_ratio': 0},
@@ -92,7 +92,7 @@ def parse_sansay_vsx_trunks(string_table):
 
 
 agent_section_sansay_vsx_trunks = AgentSection(
-    name = "sansay_vsx",
+    name = "sansay_vsx_trunks",
     parse_function = parse_sansay_vsx_trunks,
 )
 
@@ -102,14 +102,21 @@ def discover_sansay_vsx_trunks(section):
         raise IgnoreResultsError("No API status data returned.")
     else:
         for trunk in section.keys:
-            yield Service(item=f"Sansay VSX Trunk {section[trunk]["recid"]} {section[trunk]["alias"]}")
+            yield Service(
+                item=f"Sansay VSX Trunk {section[trunk]["recid"]} {section[trunk]["alias"]}"
+            )
 
 
 def check_sansay_vsx_trunks(section):
     if section is None:
         raise IgnoreResultsError("No API status data returned.")
     else:
-        yield Result(state=State.OK, summary="Everything is OK")
+        for trunkid, data in section:
+            yield Result(
+                state=State.OK,
+                summary=f"{trunkid} {data["alias"]}: Everything is OK",
+                details=f"No really, it's fine. We'll flesh this out once we get actionable data."
+            )
 
 
 check_plugin_sansay_vsx_trunks = CheckPlugin(
