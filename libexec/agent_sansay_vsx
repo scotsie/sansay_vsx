@@ -304,7 +304,6 @@ if __name__ == "__main__":
 
     stats = poll_sansay_vsx()
     # print("<<<sansay_vsx_media:sep(0)>>>")
-    # print("[{'mediaSrvIndex': 1, 'switchType': 'Internal Media Switching', 'alias': 'Internal Media Switching', 'numActiveSessions': 0, 'publicIP': '209.55.10.4', 'priority': 2, 'maxConnections': 3000, 'status': 'up'}, {'mediaSrvIndex': 2, 'switchType': 'External Advanced Hybrid-Media Switching', 'alias': 'MST3 HA Pair', 'numActiveSessions': 6, 'publicIP': '209.55.10.7', 'priority': 0, 'maxConnections': 8000, 'status': 'up'}, {'mediaSrvIndex': 3, 'switchType': 'Advanced Hybrid-MLT', 'alias': 'MLT transcoder', 'numActiveSessions': 0, 'publicIP': '209.55.10.7', 'priority': 0, 'maxConnections': 2000, 'status': 'up'}]")
     # print(process_media_stats(stats))
     with SectionWriter("sansay_vsx_media") as writer:
         writer.append_json(process_media_stats(stats))
@@ -313,8 +312,6 @@ if __name__ == "__main__":
     with SectionWriter("sansay_vsx_system") as writer:
         writer.append_json(process_system_stats(stats))
     # print("<<<sansay_vsx_trunks:sep(0)>>>")
-    # print("{'trunks': {1: {'recid': 1,'alias': 'ATL-PHL VSXs','ingress_stat': {'1st15mins_call_attempt': 0,'1st15mins_call_answer': 0,'1st15mins_call_fail': 0,'1h_call_attempt': 1,'1h_call_answer': 1,'1h_call_fail': 0,'24h_call_attempt': 25,'24h_call_answer': 18,'24h_call_fail': 5,'1st15mins_call_durationSec': 0,'1h_call_durationSec': 102,'24h_call_durationSec': 3050,'1st15mins_pdd_ms': 0,'1h_pdd_ms': 1000,'24h_pdd_ms': 16000},'gw_egress_stat': {'1st15mins_call_attempt': 3,'1st15mins_call_answer': 3,'1st15mins_call_fail': 0,'1h_call_attempt': 18,'1h_call_answer': 18,'1h_call_fail': 0,'24h_call_attempt': 242,'24h_call_answer': 204,'24h_call_fail': 15,'1st15mins_call_durationSec': 164,'1h_call_durationSec': 1891,'24h_call_durationSec': 56628,'1st15mins_pdd_ms': 5350,'1h_pdd_ms': 26910,'24h_pdd_ms': 507010},'realtime_stat': {'numOrig': 0,'numTerm': 3,'cps': 0,'numPeak': 4,'totalCLZ': 3,'numCLZCps': 0,'totalLimit': 2000,'cpsLimit': 100},'calculated_stats': {'ingress': {'avg_postdial_delay': 0,'avg_call_duration': 0,'failed_call_ratio': 0,'answer_seize_ratio': 0},'egress': {'avg_postdial_delay': 0,'avg_call_duration': 0,'failed_call_ratio': 0,'answer_seize_ratio': 0},'realtime': {'origination_sessions': 0,'origination_utilization': 0.0,'termination_sessions': 3,'termination_utilization': 0.1},'gw_egress_stat': {'avg_postdial_delay': 1.8,'avg_call_duration': 54.7,'failed_call_ratio': 0.0,'answer_seize_ratio': 100.0}}}}}")
     # print(process_trunk_stats(stats))
     # print("<<<sansay_vsx_system:sep(0)>>>")
-    # print("{'id': 1, 'sum_active_session': 6, 'sum_attempt_session': 26498, 'peak_active_session': 23, 'max_session_allowed': 19750, 'max_session_exceed': 0, 'inbound_sip_leg': 6, 'outbound_sip_leg': 6, 'peak_sip_leg': 46, 'inbound_h323_leg': 0, 'outbound_h323_leg': 0, 'peak_h323_leg': 0, 'cpu_idle_percent': 99, 'flow_control_lev': 0, 'cluster_active_session': 6, 'cluster_peak_session': 23, 'demo_lic': -1, 'slave_stat': 64, 'ha_pre_state': 'standby', 'ha_current_state': 'active', 'ha_remote_status': 0, 'switch_over_flag': 3, 'ha_local_status': 0, 'max_cps_allowed': 10000, 'max_cps_exceed': 0, 'current_cps': 0}")
     # print(process_system_stats(stats))
