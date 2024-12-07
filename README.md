@@ -1,16 +1,23 @@
-# Checkmk extension for ...
+# Checkmk extension for Sansay VSX via API
 
-![build](https://github.com/jiuka/checkmk_template/workflows/build/badge.svg)
-![flake8](https://github.com/jiuka/checkmk_template/workflows/Lint/badge.svg)
-![pytest](https://github.com/jiuka/checkmk_template/workflows/pytest/badge.svg)
+![build](https://github.com/scotsie/sansay_vsx/workflows/build/badge.svg)
+![flake8](https://github.com/scotsie/sansay_vsx/workflows/Lint/badge.svg)
+![pytest](https://github.com/scotsie/sansay_vsx/workflows/pytest/badge.svg)
 
 ## Description
 
-This is a template to develop Checkmk Extensions
+This is an initial attempt to develop a CheckMK "Special Agent" to query a Sansay VSX device using supplied credentials and returns data from the 'stats' endpoint of the API for 'media_server', 'realtime' and 'resource' pages.
 
 ## Development
 
 For the best development experience use [VSCode](https://code.visualstudio.com/) with the [Remote Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. This maps your workspace into a checkmk docker container giving you access to the python environment and libraries the installed extension has.
+
+The current configuration is modified slightly to use podman instead of docker desktop.
+
+I can't take credit for this setup as I used this template by [jiuka](https://github\.com/jiuka/checkmk_template/workflows) to start learning to develop locally using the opensource build of CheckMK.
+
+Also a word of appreciation to [Yogibaer75](https://github.com/Yogibaer75) for his publicly available plugins for 2.3.0pXX releases to help fill in gaps in the documentation (which is good but for a novice like me, still somewhat confusing).
+
 
 ## Directories
 

@@ -5,9 +5,9 @@
 Example output from special agent:
 <<<sansay_vsx_media:sep(0)>>>
 [
-    {'mediaSrvIndex': 1, 'switchType': 'Internal Media Switching', 'alias': 'Internal Media Switching', 'numActiveSessions': 0, 'publicIP': '209.55.10.4', 'priority': 2, 'maxConnections': 3000, 'status': 'up'},
-    {'mediaSrvIndex': 2, 'switchType': 'External Advanced Hybrid-Media Switching', 'alias': 'MST3 HA Pair', 'numActiveSessions': 0, 'publicIP': '209.55.10.7', 'priority': 0, 'maxConnections': 8000, 'status': 'up'},
-    {'mediaSrvIndex': 3, 'switchType': 'Advanced Hybrid-MLT', 'alias': 'MLT transcoder', 'numActiveSessions': 0, 'publicIP': '209.55.10.7', 'priority': 0, 'maxConnections': 2000, 'status': 'up'}
+    {'mediaSrvIndex': 1, 'switchType': 'Internal Media Switching', 'alias': 'Internal Media Switching', 'numActiveSessions': 0, 'publicIP': '1.2.3.4', 'priority': 2, 'maxConnections': 3000, 'status': 'up'},
+    {'mediaSrvIndex': 2, 'switchType': 'External Advanced Hybrid-Media Switching', 'alias': 'MST3 HA Pair', 'numActiveSessions': 0, 'publicIP': '1.2.3.5', 'priority': 0, 'maxConnections': 8000, 'status': 'up'},
+    {'mediaSrvIndex': 3, 'switchType': 'Advanced Hybrid-MLT', 'alias': 'MLT transcoder', 'numActiveSessions': 0, 'publicIP': '1.2.3.6', 'priority': 0, 'maxConnections': 2000, 'status': 'up'}
 ]
 <<<sansay_vsx_trunks:sep(0)>>>
 {
