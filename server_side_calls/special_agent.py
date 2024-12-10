@@ -22,8 +22,6 @@ class Params(BaseModel):
     port: int | None = None
     proto: tuple[str, str | None] = ("https", None)
     sections: list | None = None
-    disabled_sections: list | None = None
-    cached_sections: dict | None = None
     timeout: int | None = None
     retries: int | None = None
     debug: bool | None = None
@@ -34,28 +32,21 @@ def _agent_sansay_vsx_arguments(
 ) -> Iterator[SpecialAgentCommand]:
     command_arguments: list[str | Secret] = []
     if params.user is not None:
-        command_arguments += ["-u", params.user]
+        command_arguments += ["--user", params.user]
     if params.password is not None:
-        command_arguments += ["--password-id", params.password]
+        command_arguments += ["--password", params.password]
     if params.port is not None:
-        command_arguments += ["-p", str(params.port)]
+        command_arguments += ["--port", str(params.port)]
     if params.proto is not None:
-        command_arguments += ["-P", params.proto[0]]
+        command_arguments += ["--proto", params.proto[0]]
     if params.sections is not None:
-        command_arguments += ["-m", ",".join(params.sections)]
-    if params.disabled_sections is not None:
-        command_arguments += ["-n", ",".join(params.disabled_sections)]
+        command_arguments += ["--sections", ",".join(params.sections)]
     if params.timeout is not None:
         command_arguments += ["--timeout", str(params.timeout)]
     if params.retries is not None:
         command_arguments += ["--retries", str(params.retries)]
     if params.debug:
         command_arguments += ["--debug"]
-    if params.cached_sections is not None:
-        cache_sections = []
-        for n, m in params.cached_sections.items():
-            cache_sections.append(f"{n}-{m}")
-        command_arguments += ["-c", ",".join(cache_sections)]
 
     command_arguments.append(host_config.primary_ip_config.address or host_config.name)
     yield SpecialAgentCommand(command_arguments=command_arguments)
