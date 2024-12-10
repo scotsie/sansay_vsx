@@ -126,7 +126,6 @@ def fetch_sansay_json(args, report_name):
             params=params,
             verify=ssl_verify,
             timeout=timeout,
-            retries=retries
         )
         if ssl_verify and args.verbose:
             print(f"[{device}] -> fetching Sansay VSX {report_name} stats (complete)")
@@ -147,27 +146,29 @@ def poll_sansay_vsx(args):
       - realtime - overall VSX stats plus active trunks realtime data
       - media_server - media server statistics
     """
+
     stats = {}
 
     resource_data = fetch_sansay_json(args, "resource")
     if resource_data is not None:
-        stats["trunks"] = process_resource_data(resource_data)
+        stats["trunks"] = process_resource_data(args, resource_data)
 
     realtime_data = fetch_sansay_json(args, "realtime")
     if realtime_data is not None:
-        realtime_system_data, realtime_trunk_data = process_realtime_data(realtime_data)
-        #stats["system_stat"].update(realtime_system_data["system_stat"])
+        realtime_system_data, realtime_trunk_data = process_realtime_data(args, realtime_data)
+        # stats["system_stat"].update(realtime_system_data["system_stat"])
         stats["system_stat"] = realtime_system_data["system_stat"]
-        stats["trunks"].update(process_realtime_trunk_data(stats["trunks"],realtime_trunk_data))
+        stats["trunks"].update(process_realtime_trunk_data(stats["trunks"], realtime_trunk_data))
 
     media_data = fetch_sansay_json(args, "media_server")
     if media_data is not None:
-        stats["media_stats"] = process_media_data(media_data)
+        stats["media_stats"] = process_media_data(args, media_data)
 
     return stats
 
 
-def process_resource_data(data):
+def process_resource_data(args, data):
+    device = args.host
     if data is None:
         print(f"[{device}] -> unable to parse table from json response data.\n{data}")
         return
@@ -208,11 +209,12 @@ def process_resource_data(data):
                     print(f"[{device}] -> Created key for {table['name']} and value of metrics: {row_dict}.")
 
     if args.verbose:
-        pprint(f"resource {trunks=}")
+        print(f"resource {trunks=}")
     return trunks
 
 
-def process_realtime_data(data):
+def process_realtime_data(args, data):
+    device = args.host
     if data is None:
         print(f"[{device}] -> unable to parse table from json response data.\n{data}")
         return
@@ -264,7 +266,8 @@ def process_realtime_trunk_data(trunks, realtime_data):
     return trunks
 
 
-def process_media_data(media_data):
+def process_media_data(args, media_data):
+    device = args.host
     if media_data is None:
         print(f"[{device}] -> unable to parse XBMediaServerRealTimeStat from jsondata: {media_data}")
         return
@@ -272,14 +275,16 @@ def process_media_data(media_data):
     return media_servers
 
 
-def process_media_stats(stats):
+def process_media_stats(args, stats):
+    device = args.host
     if "media_stats" not in stats:
         print(f"[{device}] -> No media stats found in jsondata: {stats}")
         return None
     return stats["media_stats"]
 
 
-def process_trunk_stats(stats):
+def process_trunk_stats(args, stats):
+    device = args.host
     if "trunks" not in stats:
         print(f"[{device}] -> No trunk stats found in jsondata: {stats}")
         return None
@@ -346,7 +351,8 @@ def process_trunk_stats(stats):
     return stats["trunks"]
 
 
-def process_system_stats(stats):
+def process_system_stats(args, stats):
+    device = args.host
     if "system_stat" not in stats:
         print(f"[{device}] -> No media stats found in jsondata: {stats}")
         return
@@ -363,18 +369,13 @@ def agent_sansay_vsx_main(args: Args) -> int:
         print(f"DEBUG: {type(device)}\n{device =}")
 
     stats = poll_sansay_vsx(args)
-    # print("<<<sansay_vsx_media:sep(0)>>>")
-    # print(process_media_stats(stats))
+
     with SectionWriter("sansay_vsx_media") as writer:
-        writer.append_json(process_media_stats(stats))
+        writer.append_json(process_media_stats(args, stats))
     with SectionWriter("sansay_vsx_trunks") as writer:
-        writer.append_json(process_trunk_stats(stats))
+        writer.append_json(process_trunk_stats(args, stats))
     with SectionWriter("sansay_vsx_system") as writer:
-        writer.append_json(process_system_stats(stats))
-    # print("<<<sansay_vsx_trunks:sep(0)>>>")
-    # print(process_trunk_stats(stats))
-    # print("<<<sansay_vsx_system:sep(0)>>>")
-    # print(process_system_stats(stats))
+        writer.append_json(process_system_stats(args, stats))
 
     return 0
 
