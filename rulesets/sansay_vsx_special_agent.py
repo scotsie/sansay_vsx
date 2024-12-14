@@ -132,7 +132,13 @@ def _valuespec_special_agents_sansay_vsx() -> Dictionary:
                         validators.NumberInRange(min_value=1, max_value=20),
                     ),
                 ),
-            )
+            ),
+            "debug": DictElement(
+                parameter_form=BooleanChoice(
+                    title=Title("Enable Debug Output"),
+                    label=Label("enabled"),
+                ),
+            ),
         }
     )
 

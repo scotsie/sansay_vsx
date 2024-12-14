@@ -8,6 +8,7 @@ Resource = state/resource
 """
 
 import logging
+import re
 from collections.abc import Sequence
 
 import requests
@@ -15,6 +16,8 @@ from requests.auth import HTTPBasicAuth
 
 from cmk.special_agents.v0_unstable.agent_common import SectionWriter, special_agent_main
 from cmk.special_agents.v0_unstable.argument_parsing import Args, create_default_argument_parser
+from cmk.utils import password_store, paths
+from pathlib import Path
 
 
 LOGGER = logging.getLogger("agent_sansay_vsx")
@@ -82,6 +85,10 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
         type=int,
         help="""Number auf connection retries before failing""",
     )
+    #parser.add_argument(
+    #    "--debug",
+    #    action="store_true",
+    #)
     # required
     parser.add_argument(
         "host",
@@ -93,18 +100,29 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
 
 
 def fetch_sansay_json(args, report_name):
+    if args.debug:
+        print(f"{args=}")
+    if args.password:
+        match args.password:
+            case str() if re.match(r'^[a-zA-Z0-9-]+:/[a-zA-Z0-9/_]+$', args.password):
+                uuid, path = args.password.split(':')
+                password = password_store.lookup(pw_file=Path(path), pw_id=uuid)
+            case str() if re.match(r'^[a-zA-Z0-9]+$', args.password):
+                password = args.password
+            case other:
+                raise TypeError(other)
+
     username = args.user
-    password = args.password
     device = args.host
     protocol = args.proto
     port = args.port
-    sections = [args.sections.split(",")]
     ssl_verify = args.verify_ssl
     timeout = args.timeout
-    retries = args.retries
+    # TODO for later implementation
+    # sections = [args.sections.split(",")]
+    # retries = args.retries
 
-
-    if args.verbose:
+    if args.debug:
         print(f"[{device}] -> fetching Sansay VSX {report_name} stats")
 
     url = f"{protocol}://{device}:{port}/SSConfig/webresources/stats/{report_name}"
@@ -112,8 +130,8 @@ def fetch_sansay_json(args, report_name):
         "format": "json"
     }
 
-    if ssl_verify and args.verbose:
-        print(f"[{device}] -> WARN: hostname/certificate verification disabled via {args.ignoressl} parameter.")
+    if ssl_verify and args.debug:
+        print(f"[{device}] -> WARN: hostname/certificate verification disabled via {args.verify_ssl} parameter.")
 
     if not username or not password:
         print(f"[{device}] -> ERROR: unable to fetch Sansay report, VSX username/password parameter missing")
@@ -127,11 +145,12 @@ def fetch_sansay_json(args, report_name):
             verify=ssl_verify,
             timeout=timeout,
         )
-        if ssl_verify and args.verbose:
+        if ssl_verify and args.debug:
             print(f"[{device}] -> fetching Sansay VSX {report_name} stats (complete)")
 
         if response.status_code != 200:
             print(f"[{device}] -> ERROR: unable to fetch Sansay '{report_name}' report: {response.status_code} {response.reason}")
+            # print(f"[{device}] -> ERROR: parameters used:\n    {url=}\n    {username=}\n   {password=}\n   {HTTPBasicAuth(username, password)=}\n   {params=}\n   {ssl_verify=}\n    {timeout=}")
             return None
         return response.json()
     except requests.RequestException as e:
@@ -176,7 +195,7 @@ def process_resource_data(args, data):
     trunks = {}
     tables = data["mysqldump"]["database"]["table"]
     for table in tables:
-        if args.verbose:
+        if args.debug:
             print(f"Processing entries in {table}.")
 
         for row in table["row"]:
@@ -186,29 +205,29 @@ def process_resource_data(args, data):
             recid = row_dict.pop("id")
             trunk_id = row_dict.pop("trunk_id")
             alias = row_dict.pop("alias")
-            if args.verbose:
+            if args.debug:
                 print(f"[{device}] -> Processing row data {row}")
                 print(f"[{device}] -> Conversion to {row_dict=}")
 
             # If the trunk ID isn't in the stats, add it.
             if trunk_id not in trunks.keys():
-                if args.verbose:
+                if args.debug:
                     print(f"[{device}] -> {trunk_id} not found in stats table.")
                 trunks[trunk_id] = {}
                 trunks[trunk_id]["recid"] = recid
                 trunks[trunk_id]["alias"] = alias
-                if args.verbose:
+                if args.debug:
                     print(f"[{device}] -> Created entry for {trunks[trunk_id]} with alias {trunks[trunk_id]['alias']}.")
 
             # If table name isn't in dictionary keys, add it to separate ingress and egress stats.
             if table["name"] not in trunks[trunk_id].keys():
-                if args.verbose:
+                if args.debug:
                     print(f"[{device}] -> {table} not found in stats trunks table.")
                 trunks[trunk_id][table["name"]] = row_dict
-                if args.verbose:
+                if args.debug:
                     print(f"[{device}] -> Created key for {table['name']} and value of metrics: {row_dict}.")
 
-    if args.verbose:
+    if args.debug:
         print(f"resource {trunks=}")
     return trunks
 
@@ -226,7 +245,7 @@ def process_realtime_data(args, data):
     for table in tables:
         table_count += 1
         table_name = table["name"]
-        if args.verbose:
+        if args.debug:
             print(f"[{device}] -> processing table #{table_count} '{table_name}' stats from json response data.")
         if table_name == "system_stat":
             row_dict = {field["name"]: field["content"] for field in table["row"]["field"]}
@@ -361,11 +380,11 @@ def process_system_stats(args, stats):
 
 def agent_sansay_vsx_main(args: Args) -> int:
     device = args.host
-    if args.verbose:
+    if args.debug:
         print(f'DEBUG: {args.host =}')
         print(f'DEBUG: {args.username =}')
         print(f'DEBUG: {args.password =}')
-        print(f'DEBUG: {args.verbose =}')
+        print(f'DEBUG: {args.debug =}')
         print(f"DEBUG: {type(device)}\n{device =}")
 
     stats = poll_sansay_vsx(args)
