@@ -37,6 +37,7 @@ def parse_sansay_vsx(string_table: StringTable) -> SansayVSXAPIData:
     """parse one line of data to dictionary"""
     try:
         json_data = json.loads(string_table[0][0])
+        #print(f"{json_data}\n{type(json_data)}")
         return json_data
     except (IndexError, json.decoder.JSONDecodeError):
         return {}

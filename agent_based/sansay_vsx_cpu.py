@@ -46,41 +46,27 @@ Section = Mapping[str, models.NodeModel]
 "outbound_sip_leg": 0,"peak_active_session": 23,"peak_h323_leg": 0,"peak_sip_leg": 46,"slave_stat": 64,
 "sum_active_session": 0,"sum_attempt_session": 27412,"switch_over_flag": 3}
 
-section comes in as a list within a list containing the dictionary as a string
+section comes in as a list within a list containing the dictionary as a string.
+Parser 'parse_sansay_vsx' is in sansay_vsx.lib. It filters out the string and performs a json.load.
 [['{values above}']]
 """
 
 
-#def parse_sansay_vsx_cpu(string_table: StringTable) -> Section:
-#    # print(type(string_table))
-#    # print(f"parser string table data {string_table}")
-#    if string_table is not None:
-#        try:
-#            json_data = json.loads(string_table[0][0])
-#            #print(f"{json_data.keys()=}")
-#            return json_data
-#        except (IndexError, json.decoder.JSONDecodeError):
-#            return {}
-
-
 agent_section_sansay_vsx_cpu = AgentSection(
     name="sansay_vsx_system",
-    #parse_function=parse_sansay_vsx_cpu,
     parse_function=parse_sansay_vsx,
     parsed_section_name="sansay_vsx_cpu",
 )
 
 
-def discover_sansay_vsx_cpu(section: Section) -> DiscoveryResult:
+def discovery_sansay_vsx_cpu(section: Section) -> DiscoveryResult:
     if "cpu_idle_percent" in section.keys():
         yield Service()
     else:
         return
-    # yield Service()
 
 
-# def check_sansay_vsx_cpu(item: str, params: Mapping[str, Any], section: Section) -> CheckResult:
-def check_sansay_vsx_cpu(section: SansayVSXAPIData) -> CheckResult:
+def check_sansay_vsx_cpu(section: Section) -> CheckResult:
     # Static placeholders until I figure out how to incorporate thresholding into the UI
     # if (data := section.get(item)) is None:
     #     return
@@ -92,51 +78,67 @@ def check_sansay_vsx_cpu(section: SansayVSXAPIData) -> CheckResult:
     #    this_time=time.time(),
     #)
     cpu_upper_crit = 90
-    cpu_upper_warn = 80
+    cpu_upper_warn = .1
     session_upper_crit = 90
     session_upper_warn = 80
     cpu_utilization = 100.0 - section["cpu_idle_percent"]
+    cpu_summary = f"CPU at {cpu_utilization}%."
+    state = 0
+    if cpu_utilization >= cpu_upper_warn:
+        state = 1
+    if cpu_utilization >= cpu_upper_crit:
+        state = 2
 
     yield Result(
-        state=State.OK,
-        summary="Utilization is within accepted parameters."
+        state=State(state),
+        summary=cpu_summary
     )
 
-    yield from check_levels(
-        cpu_utilization,
-        levels_lower= cpu_upper_warn,
-        levels_upper= cpu_upper_crit,
-        metric_name= "cpu_utilization",
-        label= "CPU Utilization",
-        boundaries= (0.0, 100.0),
-        notice_only= True
-    )
+#    yield from check_levels(
+#        cpu_utilization,
+#        levels_lower= cpu_upper_warn,
+#        levels_upper= cpu_upper_crit,
+#        metric_name= "cpu_utilization",
+#        label= "CPU Utilization",
+#        boundaries= (0.0, 100.0),
+#        notice_only= True
+#    )
     session_utilization = None
     if section["max_session_allowed"]:
         session_utilization = round((section["sum_active_session"] / section["max_session_allowed"]) * 100, 1)
+        if session_utilization >= session_upper_warn:
+            state = 1
+        if session_utilization >= session_upper_crit:
+            state = 2
+        session_summary = f"Session Utilization at {session_utilization}%."
+        yield Result(
+            state=State(state),
+            summary=session_summary
+        )
+
     
-    yield from check_levels(
-        session_utilization,
-        levels_lower= session_upper_warn,
-        levels_upper= session_upper_crit,
-        metric_name= "session_utilization",
-        label= "Session Utilization",
-        boundaries= (0.0, 100.0),
-        notice_only= True      
-    )
+#    yield from check_levels(
+#        session_utilization,
+#        levels_lower= session_upper_warn,
+#        levels_upper= session_upper_crit,
+#        metric_name= "session_utilization",
+#        label= "Session Utilization",
+#        boundaries= (0.0, 100.0),
+#        notice_only= True      
+#    )
     
     # content += f"CPU utilization {cpu_utilization}\n"
     # content += f"Session utilization {session_utilization}"
 
     yield Metric(name="cpu_utilization", value=cpu_utilization, boundaries=(0, 100))
-    yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
+    #yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
 
 
 check_plugin_sansay_vsx_cpu = CheckPlugin(
     name="sansay_vsx_cpu",
     service_name="VSX CPU",
-    discovery_function=discover_sansay_vsx_cpu,
-    sections=["sansay_vsx_system"],
+    discovery_function=discovery_sansay_vsx_cpu,
+    sections=["sansay_vsx_cpu"],
     check_function=check_sansay_vsx_cpu,
     #check_ruleset_name="cpu_utilization_multiitem",
     #check_default_parameters={"levels": (90.0, 95.0)},
