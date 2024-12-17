@@ -4,28 +4,24 @@
 # License: GNU General Public License v2
 
 
-import time
-import json
 from collections.abc import Mapping
-from typing import Any
 
 from cmk.agent_based.v2 import (
     AgentSection,
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
-    get_value_store,
+    # get_value_store,
     Result,
     Service,
     State,
-    StringTable,
 )
-from cmk.plugins.lib.cpu_util import check_cpu_util
+# from cmk.plugins.lib.cpu_util import check_cpu_util
 from cmk.plugins.netapp import models
 
 from cmk.agent_based.v2 import (
     Metric,
-    check_levels,
+    # check_levels,
 )
 
 from cmk_addons.plugins.sansay_vsx.lib import (
