@@ -40,12 +40,12 @@ def _valuespec_special_agents_sansay_vsx() -> Dictionary:
                 required=True,
             ),
             "password": DictElement(
-                 parameter_form=Password(
-                      title=Title("Password"),
-                      custom_validate=(validators.LengthInRange(min_value=1),),
-                      migrate=migrate_to_password,
+                parameter_form=Password(
+                    title=Title("Password"),
+                    custom_validate=(validators.LengthInRange(min_value=1),),
+                    migrate=migrate_to_password,
                  ),
-                 required=True,
+                required=True,
             ),
             "proto": DictElement(
                 parameter_form=CascadingSingleChoice(
