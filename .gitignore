@@ -1,4 +1,4 @@
-*.mkp
+archive
 .coverage
 __pycache__
 debug.log
