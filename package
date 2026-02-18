@@ -1,22 +1,19 @@
-{
-    'author': u'Scott Crace',
-    'description': u'A CheckMK plugin for use with Sansay VSX',
-    'download_url': 'https://github.com/scotsie/sansay_vsx',
-    'files': {
-        'agent_based': [],
-        'agents': [],
-        'checkman': [],
-        'checks': [],
-        'doc': [],
-        'inventory': [],
-        'notifications': [],
-        'pnp-templates': [],
-        'web': []
-    },
-    'name': '',
-    'title': u'',
-    'version': '0.0.1',
-    'version.min_required': '2.2.0',
-    'version.packaged': '2.3.0',
-    'version.usable_until': '2.4.0',
-}
+{'author': 'Scott Crace <mscottcrace@gmail.com>',
+ 'description': 'A special agent meant to query the Sansay VSX device API and '
+                "return the stats for 'media_stats', 'resource' and 'realtime' "
+                'endpoints.\n',
+ 'download_url': 'https://github.com/scotsie/sansay_vsx',
+ 'files': {'cmk_addons_plugins': ['sansay_vsx/lib.py',
+                                  'sansay_vsx/agent_based/sansay_vsx_media_stats.py',
+                                  'sansay_vsx/agent_based/sansay_vsx_system.py',
+                                  'sansay_vsx/agent_based/sansay_vsx_trunks.py',
+                                  'sansay_vsx/libexec/agent_sansay_vsx',
+                                  'sansay_vsx/rulesets/sansay_vsx_special_agent.py',
+                                  'sansay_vsx/server_side_calls/special_agent.py',
+                                  'sansay_vsx/special_agents/agent_sansay_vsx.py']},
+ 'name': 'sansay_vsx',
+ 'title': 'Sansay VSX Special Agent',
+ 'version': '2.3.2',
+ 'version.min_required': '2.3.0p10',
+ 'version.packaged': '2.3.0p19',
+ 'version.usable_until': ''}

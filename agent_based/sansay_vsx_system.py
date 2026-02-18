@@ -4,10 +4,7 @@
 # License: GNU General Public License v2
 
 
-import time
-import json
 from collections.abc import Mapping
-from typing import Any
 
 from cmk.agent_based.v2 import (
     AgentSection,
@@ -18,20 +15,20 @@ from cmk.agent_based.v2 import (
     Result,
     Service,
     State,
-    StringTable,
 )
-from cmk.plugins.lib.cpu_util import check_cpu_util
+# from cmk.plugins.lib.cpu_util import check_cpu_util
 from cmk.plugins.netapp import models
 
 from cmk.agent_based.v2 import (
     Metric,
-    check_levels,
+    # check_levels,
 )
 
 from cmk_addons.plugins.sansay_vsx.lib import (
     parse_sansay_vsx,
     SansayVSXAPIData
 )
+import time
 
 
 Section = Mapping[str, models.NodeModel]
@@ -66,12 +63,17 @@ def discovery_sansay_vsx_system(section: Section) -> DiscoveryResult:
         return
 
 
-def check_sansay_vsx_system(section: Section) -> CheckResult:
+def check_sansay_vsx_system(section: Section, params) -> CheckResult:
     # Static placeholders until I figure out how to incorporate thresholding into the UI
     cpu_upper_crit = 90
     cpu_upper_warn = 80
     session_upper_crit = 90
     session_upper_warn = 80
+    # Drop-detection thresholds (absolute percent points)
+    session_drop_warn = 10.0
+    session_drop_crit = 20.0
+    value_store = get_value_store()
+    this_time = time.time()
     cpu_utilization = 100.0 - section["cpu_idle_percent"]
     cpu_summary = f"CPU at {cpu_utilization}%."
     state = 0
@@ -86,17 +88,39 @@ def check_sansay_vsx_system(section: Section) -> CheckResult:
     )
 
     session_utilization = None
-    if section["max_session_allowed"]:
+    if section["max_session_allowed"] and section["max_session_allowed"]:
         session_utilization = round((section["sum_active_session"] / section["max_session_allowed"]) * 100, 1)
+        # determine state based on absolute utilization as before
+        session_state = 0
         if session_utilization >= session_upper_warn:
-            state = 1
+            session_state = 1
         if session_utilization >= session_upper_crit:
-            state = 2
+            session_state = 2
+
+        # detect drop since last interval using value_store
+        prev = value_store.get("sansay_vsx.session_utilization")
+        drop = None
+        if prev is not None:
+            drop = round(prev - session_utilization, 1)
+            # if dropped by configured amounts, escalate state
+            if drop >= session_drop_warn and session_state < 1:
+                session_state = 1
+            if drop >= session_drop_crit:
+                session_state = 2
+
+        # persist current value for next run
+        value_store["sansay_vsx.session_utilization"] = session_utilization
+
         session_summary = f"Session Utilization at {session_utilization}%."
+        if drop is not None:
+            session_summary += f" Drop since last: {drop}%."
+
         yield Result(
-            state=State(state),
+            state=State(session_state),
             summary=session_summary
         )
+        # also publish drop as metric (0 on first run)
+        yield Metric(name="session_utilization_drop", value=(drop if drop is not None else 0.0), boundaries=(None, None))
 
     yield Metric(name="cpu_utilization", value=cpu_utilization, boundaries=(0, 100))
     yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
