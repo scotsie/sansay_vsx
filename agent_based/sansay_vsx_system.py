@@ -135,4 +135,5 @@ check_plugin_sansay_vsx_system = CheckPlugin(
     discovery_function=discovery_sansay_vsx_system,
     sections=["sansay_vsx_system"],
     check_function=check_sansay_vsx_system,
+    check_default_parameters={},
 )
