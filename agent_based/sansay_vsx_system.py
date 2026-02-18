@@ -91,7 +91,7 @@ def check_sansay_vsx_system(section: Section, params) -> CheckResult:
     )
 
     session_utilization = None
-    if section["max_session_allowed"] and section["max_session_allowed"]:
+    if section["max_session_allowed"] and section["sum_active_session"] is not None:
         session_utilization = round((section["sum_active_session"] / section["max_session_allowed"]) * 100, 1)
         # determine state based on absolute utilization as before
         session_state = 0
@@ -126,7 +126,8 @@ def check_sansay_vsx_system(section: Section, params) -> CheckResult:
         yield Metric(name="session_utilization_drop", value=(drop if drop is not None else 0.0), boundaries=(None, None))
 
     yield Metric(name="cpu_utilization", value=cpu_utilization, boundaries=(0, 100))
-    yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
+    if session_utilization is not None:
+        yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
 
 
 check_plugin_sansay_vsx_system = CheckPlugin(
