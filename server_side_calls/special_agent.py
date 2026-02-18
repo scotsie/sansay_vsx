@@ -22,6 +22,7 @@ class Params(BaseModel):
     port: int | None = None
     proto: tuple[str, str | None] = ("https", None)
     sections: list | None = None
+    verify_ssl: bool | None = None
     timeout: int | None = None
     retries: int | None = None
     debug: bool | None = None
@@ -41,6 +42,8 @@ def _agent_sansay_vsx_arguments(
         command_arguments += ["--proto", params.proto[0]]
     if params.sections is not None:
         command_arguments += ["--sections", ",".join(params.sections)]
+    if params.verify_ssl:
+        command_arguments += ["--verify_ssl"]
     if params.timeout is not None:
         command_arguments += ["--timeout", str(params.timeout)]
     if params.retries is not None:

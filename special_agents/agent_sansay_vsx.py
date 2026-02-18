@@ -102,6 +102,7 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
 def fetch_sansay_json(args, report_name):
     if args.debug:
         print(f"{args=}")
+    password = None
     if args.password:
         match args.password:
             case str() if re.match(r'^[a-zA-Z0-9-]+:/[a-zA-Z0-9/_]+$', args.password):
@@ -130,7 +131,7 @@ def fetch_sansay_json(args, report_name):
         "format": "json"
     }
 
-    if ssl_verify and args.debug:
+    if not ssl_verify and args.debug:
         print(f"[{device}] -> WARN: hostname/certificate verification disabled via {args.verify_ssl} parameter.")
 
     if not username or not password:
@@ -382,7 +383,7 @@ def agent_sansay_vsx_main(args: Args) -> int:
     device = args.host
     if args.debug:
         print(f'DEBUG: {args.host =}')
-        print(f'DEBUG: {args.username =}')
+        print(f'DEBUG: {args.user =}')
         print(f'DEBUG: {args.password =}')
         print(f'DEBUG: {args.debug =}')
         print(f"DEBUG: {type(device)}\n{device =}")
