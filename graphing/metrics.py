@@ -13,6 +13,11 @@ unit_percent = Unit(
     StrictPrecision(0)
 )
 
+unit_count = Unit(
+    DecimalNotation(""),
+    StrictPrecision(0)
+)
+
 
 metric_sansay_cpu_utilization = Metric(
     name="cpu_utilization",
@@ -42,6 +47,23 @@ metric_sansay_session_utilization_trend = Product(
     factors=[
         "metric_sansay_session_utilization",
         "metric_sansay_session_utilization_drop"
+    ],
+)
+
+
+metric_sansay_num_active_sessions = Metric(
+    name="num_active_sessions",
+    title=Title("Active Sessions"),
+    unit=unit_count,
+    color=Color.BLUE,
+)
+
+
+graph_sansay_vsx_media = Graph(
+    name="sansay_vsx_media",
+    title=Title("Sansay VSX Media Server Active Sessions"),
+    compound_lines=[
+        "num_active_sessions",
     ],
 )
 
