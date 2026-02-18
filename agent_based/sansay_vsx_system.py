@@ -12,26 +12,16 @@ from cmk.agent_based.v2 import (
     CheckResult,
     DiscoveryResult,
     get_value_store,
+    Metric,
     Result,
     Service,
     State,
 )
-# from cmk.plugins.lib.cpu_util import check_cpu_util
-from cmk.plugins.netapp import models
 
-from cmk.agent_based.v2 import (
-    Metric,
-    # check_levels,
-)
-
-from cmk_addons.plugins.sansay_vsx.lib import (
-    parse_sansay_vsx,
-    SansayVSXAPIData
-)
-import time
+from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
-Section = Mapping[str, models.NodeModel]
+Section = Mapping[str, object]
 
 # Special Agent Output to Parse for this service
 """
@@ -67,16 +57,10 @@ def check_sansay_vsx_system(section: Section, params) -> CheckResult:
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
-    # Static placeholders until I figure out how to incorporate thresholding into the UI
-    cpu_upper_crit = 90
-    cpu_upper_warn = 80
-    session_upper_crit = 90
-    session_upper_warn = 80
-    # Drop-detection thresholds (absolute percent points)
-    session_drop_warn = 10.0
-    session_drop_crit = 20.0
+    _, (cpu_upper_warn, cpu_upper_crit) = params["cpu_levels"]
+    _, (session_upper_warn, session_upper_crit) = params["session_levels"]
+    _, (session_drop_warn, session_drop_crit) = params["session_drop_levels"]
     value_store = get_value_store()
-    this_time = time.time()
     cpu_utilization = 100.0 - section["cpu_idle_percent"]
     cpu_summary = f"CPU at {cpu_utilization}%."
     state = 0
@@ -136,5 +120,10 @@ check_plugin_sansay_vsx_system = CheckPlugin(
     discovery_function=discovery_sansay_vsx_system,
     sections=["sansay_vsx_system"],
     check_function=check_sansay_vsx_system,
-    check_default_parameters={},
+    check_ruleset_name="sansay_vsx_system",
+    check_default_parameters={
+        "cpu_levels": ("fixed", (80.0, 90.0)),
+        "session_levels": ("fixed", (80.0, 90.0)),
+        "session_drop_levels": ("fixed", (10.0, 20.0)),
+    },
 )

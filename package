@@ -9,6 +9,7 @@
                                   'sansay_vsx/agent_based/sansay_vsx_trunks.py',
                                   'sansay_vsx/graphing/metrics.py',
                                   'sansay_vsx/libexec/agent_sansay_vsx',
+                                  'sansay_vsx/rulesets/sansay_vsx_check_parameters.py',
                                   'sansay_vsx/rulesets/sansay_vsx_special_agent.py',
                                   'sansay_vsx/server_side_calls/special_agent.py',
                                   'sansay_vsx/special_agents/agent_sansay_vsx.py']},
