@@ -64,14 +64,18 @@ def check_sansay_vsx_media(item, section: Section) -> CheckResult:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
     media = [d for d in section if d.get("alias") == item]
-    if len(media) == 1:
-        media = media[0]
-    else:
+    if len(media) == 0:
+        yield Result(state=State.UNKNOWN, summary=f"No media entry found for item '{item}'")
+        return
+    if len(media) > 1:
+        indices = [e["mediaSrvIndex"] for e in media]
         yield Result(
-            state = State.UNKNOWN,
-            summary = f"{media['alias']} ({media['publicIP']}) had more than one match.",
-            details = f"{[e["mediaSrvIndex"] for e in media]}"
+            state=State.UNKNOWN,
+            summary=f"Multiple media entries matched '{item}'",
+            details=f"Matched mediaSrvIndex values: {indices}",
         )
+        return
+    media = media[0]
     
     yield Result(
         state = State.OK,
