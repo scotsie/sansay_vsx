@@ -16,7 +16,7 @@ from requests.auth import HTTPBasicAuth
 
 from cmk.special_agents.v0_unstable.agent_common import SectionWriter, special_agent_main
 from cmk.special_agents.v0_unstable.argument_parsing import Args, create_default_argument_parser
-from cmk.utils import password_store, paths
+from cmk.utils import password_store
 from pathlib import Path
 
 
@@ -85,11 +85,6 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
         type=int,
         help="""Number auf connection retries before failing""",
     )
-    #parser.add_argument(
-    #    "--debug",
-    #    action="store_true",
-    #)
-    # required
     parser.add_argument(
         "host",
         metavar="HOSTNAME",
@@ -254,12 +249,11 @@ def process_realtime_data(args, data):
         elif table_name == "XBResourceRealTimeStatList":
             # Fetch the row value and if it's not present, return an empty list.
             # This happens due to the device only sending active trunks.
-            #rows = table.get("row",list())
-            rows = table.get("row",None)
+            rows = table.get("row", None)
             if rows:
                 for row in rows:
                     realtime_row_dict = {fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]}
-                    ## Ignore realtime trunk data that has the FQDN noted as a group
+                    # Ignore realtime trunk data that has the FQDN noted as a group
                     if realtime_row_dict["fqdn"] != "Group":
                         trunk_realtime_data[realtime_row_dict["trunkId"]] = {fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]}
     return system_stat, trunk_realtime_data
@@ -267,7 +261,7 @@ def process_realtime_data(args, data):
 
 def process_realtime_trunk_data(trunks, realtime_data):
     """
-    Add a realtime_stat value to every trunk updating any with 
+    Add a realtime_stat value to every trunk updating any with
     realtime_data provided otherwise default to 0 for the polling
     interval.
     """
@@ -367,7 +361,6 @@ def process_trunk_stats(args, stats):
             stats["trunks"][trunk].pop(direction)
 
         stats["trunks"][trunk]["calculated_stats"] = calculated_stats
-        #print(f"{trunk} {data['alias']} - {data['calculated_stats']}")
     return stats["trunks"]
 
 
