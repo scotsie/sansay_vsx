@@ -11,22 +11,14 @@ from cmk.agent_based.v2 import (
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
-    # get_value_store,
+    Metric,
     Result,
     Service,
     State,
 )
 from cmk.plugins.netapp import models
 
-from cmk.agent_based.v2 import (
-    Metric,
-    check_levels,
-)
-
-from cmk_addons.plugins.sansay_vsx.lib import (
-    parse_sansay_vsx,
-    SansayVSXAPIData
-)
+from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
 Section = Mapping[str, models.NodeModel]
