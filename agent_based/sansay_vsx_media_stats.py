@@ -60,6 +60,9 @@ def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
 
 
 def check_sansay_vsx_media(item, section: Section) -> CheckResult:
+    if not section:
+        yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
+        return
     media = [d for d in section if d.get("alias") == item]
     if len(media) == 1:
         media = media[0]
