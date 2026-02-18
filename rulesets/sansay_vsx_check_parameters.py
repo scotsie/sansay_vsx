@@ -14,7 +14,7 @@ from cmk.rulesets.v1.form_specs import (
     SimpleLevels,
     validators,
 )
-from cmk.rulesets.v1.rule_specs import CheckParameters, HostCondition, Topic
+from cmk.rulesets.v1.rule_specs import CheckParameters, HostAndItemCondition, HostCondition, Topic
 
 
 def _parameter_form_sansay_vsx_system() -> Dictionary:
@@ -79,4 +79,37 @@ rule_spec_sansay_vsx_system = CheckParameters(
     topic=Topic.NETWORKING,
     parameter_form=_parameter_form_sansay_vsx_system,
     condition=HostCondition(),
+)
+
+
+def _parameter_form_sansay_vsx_media() -> Dictionary:
+    return Dictionary(
+        title=Title("Sansay VSX Media Server Thresholds"),
+        elements={
+            "session_levels": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Session Utilization"),
+                    help_text=Help(
+                        "Upper warning and critical thresholds for media server session "
+                        "utilization as a percentage of maxConnections."
+                    ),
+                    form_spec_template=Float(
+                        custom_validate=(
+                            validators.NumberInRange(min_value=0.0, max_value=100.0),
+                        ),
+                    ),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue((80.0, 90.0)),
+                ),
+            ),
+        },
+    )
+
+
+rule_spec_sansay_vsx_media = CheckParameters(
+    name="sansay_vsx_media",
+    title=Title("Sansay VSX Media Server"),
+    topic=Topic.NETWORKING,
+    parameter_form=_parameter_form_sansay_vsx_media,
+    condition=HostAndItemCondition(item_title=Title("Media Server")),
 )

@@ -50,7 +50,7 @@ def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
         yield Service(item=f"{media_server["alias"]}")
 
 
-def check_sansay_vsx_media(item, section: Section) -> CheckResult:
+def check_sansay_vsx_media(item, section: Section, params) -> CheckResult:
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
@@ -67,22 +67,34 @@ def check_sansay_vsx_media(item, section: Section) -> CheckResult:
         )
         return
     media = media[0]
-    
+
     yield Result(
-        state = State.OK,
-        summary = f"{media['alias']} ({media['publicIP']})",
-        details = f"{media['alias']} is showing status as {media["status"]} with {media["numActiveSessions"]}."
-        )
-    if media["status"] != 'up':
-        yield Result(
-            state = State.CRIT,
-            summary= f"{media['alias']} ({media['publicIP']}) is not in an up state."
-        )
-    yield Metric(
-        name = "num_active_sessions",
-        value = media["numActiveSessions"],
-        boundaries = (0, media["maxConnections"])
+        state=State.OK,
+        summary=f"{media['alias']} ({media['publicIP']})",
+        details=f"{media['alias']} is showing status as {media['status']} with {media['numActiveSessions']} active sessions.",
     )
+    if media["status"] != "up":
+        yield Result(
+            state=State.CRIT,
+            summary=f"{media['alias']} ({media['publicIP']}) is not in an up state.",
+        )
+
+    max_connections = media["maxConnections"]
+    num_active = media["numActiveSessions"]
+    yield Metric(name="num_active_sessions", value=num_active, boundaries=(0, max_connections))
+
+    if max_connections > 0:
+        _, (session_warn, session_crit) = params["session_levels"]
+        session_utilization = round((num_active / max_connections) * 100, 1)
+        session_state = 0
+        if session_utilization >= session_warn:
+            session_state = 1
+        if session_utilization >= session_crit:
+            session_state = 2
+        yield Result(
+            state=State(session_state),
+            summary=f"Session utilization: {session_utilization}% ({num_active}/{max_connections})",
+        )
 
 
 check_plugin_sansay_vsx_media = CheckPlugin(
@@ -91,4 +103,8 @@ check_plugin_sansay_vsx_media = CheckPlugin(
     discovery_function=discovery_sansay_vsx_media,
     sections=["sansay_vsx_media"],
     check_function=check_sansay_vsx_media,
+    check_ruleset_name="sansay_vsx_media",
+    check_default_parameters={
+        "session_levels": ("fixed", (80.0, 90.0)),
+    },
 )
