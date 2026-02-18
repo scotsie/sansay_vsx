@@ -88,7 +88,7 @@ def check_sansay_vsx_media(item, section: Section) -> CheckResult:
             summary= f"{media['alias']} ({media['publicIP']}) is not in an up state."
         )
     yield Metric(
-        name = f"numActiveSessionsdirection",
+        name = "num_active_sessions",
         value = media["numActiveSessions"],
         boundaries = (0, media["maxConnections"])
     )
