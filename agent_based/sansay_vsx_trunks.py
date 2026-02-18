@@ -89,7 +89,7 @@ def discovery_sansay_vsx_trunks(section: Section) -> DiscoveryResult:
         yield Service(item=f"{trunk_id} {trunk_data['alias']}")
 
 
-def check_sansay_vsx_trunks(item, section: Section, params) -> CheckResult:
+def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
     trunk_id = item.split()[0]
     trunk_data = section[trunk_id]
     yield Result(

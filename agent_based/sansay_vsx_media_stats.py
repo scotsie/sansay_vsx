@@ -50,7 +50,7 @@ def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
         yield Service(item=f"{media_server["alias"]}")
 
 
-def check_sansay_vsx_media(item, section: Section, params) -> CheckResult:
+def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
