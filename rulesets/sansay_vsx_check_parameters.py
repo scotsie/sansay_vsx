@@ -11,6 +11,7 @@ from cmk.rulesets.v1.form_specs import (
     Dictionary,
     Float,
     LevelDirection,
+    Levels,
     SimpleLevels,
     validators,
 )
@@ -112,4 +113,130 @@ rule_spec_sansay_vsx_media = CheckParameters(
     topic=Topic.NETWORKING,
     parameter_form=_parameter_form_sansay_vsx_media,
     condition=HostAndItemCondition(item_title=Title("Media Server")),
+)
+
+
+def _trunk_stat_direction_dictionary(title_str: str) -> Dictionary:
+    """Shared threshold form for egress, ingress, and gw_egress_stat direction groups."""
+    return Dictionary(
+        title=Title(title_str),
+        elements={
+            "failed_call_ratio_levels": DictElement(
+                parameter_form=Levels(
+                    title=Title("Failed Call Ratio"),
+                    help_text=Help(
+                        "Upper warning and critical thresholds for the failed call ratio (%). "
+                        "Select 'No levels' to collect this metric without alerting."
+                    ),
+                    form_spec_template=Float(
+                        custom_validate=(
+                            validators.NumberInRange(min_value=0.0, max_value=100.0),
+                        ),
+                    ),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue((5.0, 15.0)),
+                ),
+            ),
+            "answer_seize_ratio_levels": DictElement(
+                parameter_form=Levels(
+                    title=Title("Answer Seize Ratio"),
+                    help_text=Help(
+                        "Lower warning and critical thresholds for the answer seize ratio (%). "
+                        "Alerts when ASR drops below the configured values. "
+                        "Select 'No levels' to collect this metric without alerting."
+                    ),
+                    form_spec_template=Float(
+                        custom_validate=(
+                            validators.NumberInRange(min_value=0.0, max_value=100.0),
+                        ),
+                    ),
+                    level_direction=LevelDirection.LOWER,
+                    prefill_fixed_levels=DefaultValue((70.0, 50.0)),
+                ),
+            ),
+            "avg_postdial_delay_levels": DictElement(
+                parameter_form=Levels(
+                    title=Title("Average Post-Dial Delay"),
+                    help_text=Help(
+                        "Upper warning and critical thresholds for average post-dial delay (seconds). "
+                        "High PDD indicates upstream routing latency or SIP signaling issues. "
+                        "Select 'No levels' to collect this metric without alerting."
+                    ),
+                    form_spec_template=Float(
+                        custom_validate=(
+                            validators.NumberInRange(min_value=0.0),
+                        ),
+                    ),
+                    level_direction=LevelDirection.UPPER,
+                    prefill_fixed_levels=DefaultValue((3.0, 5.0)),
+                ),
+            ),
+        },
+    )
+
+
+def _parameter_form_sansay_vsx_trunks() -> Dictionary:
+    return Dictionary(
+        title=Title("Sansay VSX Trunk Thresholds"),
+        elements={
+            "egress": DictElement(
+                parameter_form=_trunk_stat_direction_dictionary("Egress"),
+            ),
+            "ingress": DictElement(
+                parameter_form=_trunk_stat_direction_dictionary("Ingress"),
+            ),
+            "gw_egress_stat": DictElement(
+                parameter_form=_trunk_stat_direction_dictionary("Gateway Egress"),
+            ),
+            "realtime": DictElement(
+                parameter_form=Dictionary(
+                    title=Title("Realtime"),
+                    elements={
+                        "origination_utilization_levels": DictElement(
+                            parameter_form=Levels(
+                                title=Title("Origination Utilization"),
+                                help_text=Help(
+                                    "Upper warning and critical thresholds for trunk outbound "
+                                    "capacity utilization (%). Select 'No levels' to collect "
+                                    "this metric without alerting."
+                                ),
+                                form_spec_template=Float(
+                                    custom_validate=(
+                                        validators.NumberInRange(min_value=0.0, max_value=100.0),
+                                    ),
+                                ),
+                                level_direction=LevelDirection.UPPER,
+                                prefill_fixed_levels=DefaultValue((80.0, 90.0)),
+                            ),
+                        ),
+                        "termination_utilization_levels": DictElement(
+                            parameter_form=Levels(
+                                title=Title("Termination Utilization"),
+                                help_text=Help(
+                                    "Upper warning and critical thresholds for trunk inbound "
+                                    "capacity utilization (%). Select 'No levels' to collect "
+                                    "this metric without alerting."
+                                ),
+                                form_spec_template=Float(
+                                    custom_validate=(
+                                        validators.NumberInRange(min_value=0.0, max_value=100.0),
+                                    ),
+                                ),
+                                level_direction=LevelDirection.UPPER,
+                                prefill_fixed_levels=DefaultValue((80.0, 90.0)),
+                            ),
+                        ),
+                    },
+                ),
+            ),
+        },
+    )
+
+
+rule_spec_sansay_vsx_trunks = CheckParameters(
+    name="sansay_vsx_trunks",
+    title=Title("Sansay VSX Trunk"),
+    topic=Topic.NETWORKING,
+    parameter_form=_parameter_form_sansay_vsx_trunks,
+    condition=HostAndItemCondition(item_title=Title("Trunk")),
 )

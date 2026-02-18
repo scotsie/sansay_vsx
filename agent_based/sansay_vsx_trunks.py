@@ -4,8 +4,6 @@
 # License: GNU General Public License v2
 
 
-import time
-import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -14,27 +12,16 @@ from cmk.agent_based.v2 import (
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
-    get_value_store,
+    Metric,
     Result,
     Service,
     State,
-    StringTable,
-)
-from cmk.plugins.lib.cpu_util import check_cpu_util
-from cmk.plugins.netapp import models
-
-from cmk.agent_based.v2 import (
-    Metric,
-    check_levels,
 )
 
-from cmk_addons.plugins.sansay_vsx.lib import (
-    parse_sansay_vsx,
-    SansayVSXAPIData
-)
+from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
-Section = Mapping[str, models.NodeModel]
+Section = Mapping[str, Any]
 
 # Special Agent Output to Parse for this service
 """
@@ -65,6 +52,30 @@ Parser 'parse_sansay_vsx' is in sansay_vsx.lib. It filters out the string and pe
 [['{values above}']]
 """
 
+# Maps (direction_group, metric_name) -> "upper" or "lower" bound direction.
+# Metrics absent from this table are emitted as Metrics only with no alerting.
+_METRIC_LEVEL_DIRECTION: dict[str, dict[str, str]] = {
+    "egress": {
+        "failed_call_ratio": "upper",
+        "answer_seize_ratio": "lower",
+        "avg_postdial_delay": "upper",
+    },
+    "ingress": {
+        "failed_call_ratio": "upper",
+        "answer_seize_ratio": "lower",
+        "avg_postdial_delay": "upper",
+    },
+    "gw_egress_stat": {
+        "failed_call_ratio": "upper",
+        "answer_seize_ratio": "lower",
+        "avg_postdial_delay": "upper",
+    },
+    "realtime": {
+        "origination_utilization": "upper",
+        "termination_utilization": "upper",
+    },
+}
+
 
 agent_section_sansay_vsx_cpu = AgentSection(
     name="sansay_vsx_trunks",
@@ -74,27 +85,57 @@ agent_section_sansay_vsx_cpu = AgentSection(
 
 
 def discovery_sansay_vsx_trunks(section: Section) -> DiscoveryResult:
-    # print(f"discover trunks {section=}\n{type(section)}")
     for trunk_id, trunk_data in section.items():
-        yield Service(item=f"{trunk_id} {trunk_data["alias"]}")
+        yield Service(item=f"{trunk_id} {trunk_data['alias']}")
 
 
-def check_sansay_vsx_trunks(item, section: Section) -> CheckResult:
+def check_sansay_vsx_trunks(item, section: Section, params) -> CheckResult:
     trunk_id = item.split()[0]
-    # print(f"{trunk_id=}")
     trunk_data = section[trunk_id]
-    # print(f"{trunk_data=}")
     yield Result(
         state=State.OK,
-        summary=f"Trunk {trunk_id} {trunk_data["alias"]}",
-        details = f"record id {trunk_data["recid"]}"
+        summary=f"Trunk {trunk_id} {trunk_data['alias']}",
+        details=f"record id {trunk_data['recid']}",
     )
-    
-    if "calculated_stats" in trunk_data.keys():
-        # print(trunk_data["calculated_stats"])
-        for direction, stats in trunk_data["calculated_stats"].items():
-            for metric, value in stats.items():
-                yield Metric(name=f"{direction}_{metric}", value=value)
+
+    if "calculated_stats" not in trunk_data:
+        return
+
+    for direction, stats in trunk_data["calculated_stats"].items():
+        direction_params = params.get(direction, {})
+        direction_level_config = _METRIC_LEVEL_DIRECTION.get(direction, {})
+
+        for metric, value in stats.items():
+            yield Metric(name=f"{direction}_{metric}", value=value)
+
+            bound = direction_level_config.get(metric)
+            if bound is None:
+                continue
+
+            level_spec = direction_params.get(f"{metric}_levels", ("no_levels", None))
+            if level_spec[0] == "no_levels":
+                continue
+
+            warn, crit = level_spec[1]
+            if bound == "upper":
+                state = 0
+                if value >= warn:
+                    state = 1
+                if value >= crit:
+                    state = 2
+            else:  # lower
+                state = 0
+                if value <= warn:
+                    state = 1
+                if value <= crit:
+                    state = 2
+
+            if state > 0:
+                label = metric.replace("_", " ").title()
+                yield Result(
+                    state=State(state),
+                    summary=f"{direction.replace('_', ' ').title()} {label}: {value}",
+                )
 
 
 check_plugin_sansay_vsx_trunks = CheckPlugin(
@@ -103,4 +144,26 @@ check_plugin_sansay_vsx_trunks = CheckPlugin(
     discovery_function=discovery_sansay_vsx_trunks,
     sections=["sansay_vsx_trunks"],
     check_function=check_sansay_vsx_trunks,
+    check_ruleset_name="sansay_vsx_trunks",
+    check_default_parameters={
+        "egress": {
+            "failed_call_ratio_levels": ("fixed", (5.0, 15.0)),
+            "answer_seize_ratio_levels": ("fixed", (70.0, 50.0)),
+            "avg_postdial_delay_levels": ("no_levels", None),
+        },
+        "ingress": {
+            "failed_call_ratio_levels": ("fixed", (5.0, 15.0)),
+            "answer_seize_ratio_levels": ("fixed", (70.0, 50.0)),
+            "avg_postdial_delay_levels": ("no_levels", None),
+        },
+        "gw_egress_stat": {
+            "failed_call_ratio_levels": ("fixed", (5.0, 15.0)),
+            "answer_seize_ratio_levels": ("fixed", (70.0, 50.0)),
+            "avg_postdial_delay_levels": ("no_levels", None),
+        },
+        "realtime": {
+            "origination_utilization_levels": ("fixed", (80.0, 90.0)),
+            "termination_utilization_levels": ("fixed", (80.0, 90.0)),
+        },
+    },
 )
