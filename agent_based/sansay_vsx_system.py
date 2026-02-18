@@ -53,7 +53,7 @@ def discovery_sansay_vsx_system(section: Section) -> DiscoveryResult:
         return
 
 
-def check_sansay_vsx_system(section: Section, params) -> CheckResult:
+def check_sansay_vsx_system(params, section: Section) -> CheckResult:
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
