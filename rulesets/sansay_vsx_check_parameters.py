@@ -11,7 +11,6 @@ from cmk.rulesets.v1.form_specs import (
     Dictionary,
     Float,
     LevelDirection,
-    Levels,
     SimpleLevels,
     validators,
 )
@@ -122,7 +121,7 @@ def _trunk_stat_direction_dictionary(title_str: str) -> Dictionary:
         title=Title(title_str),
         elements={
             "failed_call_ratio_levels": DictElement(
-                parameter_form=Levels(
+                parameter_form=SimpleLevels(
                     title=Title("Failed Call Ratio"),
                     help_text=Help(
                         "Upper warning and critical thresholds for the failed call ratio (%). "
@@ -138,7 +137,7 @@ def _trunk_stat_direction_dictionary(title_str: str) -> Dictionary:
                 ),
             ),
             "answer_seize_ratio_levels": DictElement(
-                parameter_form=Levels(
+                parameter_form=SimpleLevels(
                     title=Title("Answer Seize Ratio"),
                     help_text=Help(
                         "Lower warning and critical thresholds for the answer seize ratio (%). "
@@ -155,7 +154,7 @@ def _trunk_stat_direction_dictionary(title_str: str) -> Dictionary:
                 ),
             ),
             "avg_postdial_delay_levels": DictElement(
-                parameter_form=Levels(
+                parameter_form=SimpleLevels(
                     title=Title("Average Post-Dial Delay"),
                     help_text=Help(
                         "Upper warning and critical thresholds for average post-dial delay (seconds). "
@@ -193,7 +192,7 @@ def _parameter_form_sansay_vsx_trunks() -> Dictionary:
                     title=Title("Realtime"),
                     elements={
                         "origination_utilization_levels": DictElement(
-                            parameter_form=Levels(
+                            parameter_form=SimpleLevels(
                                 title=Title("Origination Utilization"),
                                 help_text=Help(
                                     "Upper warning and critical thresholds for trunk outbound "
@@ -210,7 +209,7 @@ def _parameter_form_sansay_vsx_trunks() -> Dictionary:
                             ),
                         ),
                         "termination_utilization_levels": DictElement(
-                            parameter_form=Levels(
+                            parameter_form=SimpleLevels(
                                 title=Title("Termination Utilization"),
                                 help_text=Help(
                                     "Upper warning and critical thresholds for trunk inbound "
