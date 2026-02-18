@@ -4,7 +4,7 @@
 # License: GNU General Public License v2
 
 
-from collections.abc import Mapping
+from typing import Any
 
 from cmk.agent_based.v2 import (
     AgentSection,
@@ -16,12 +16,11 @@ from cmk.agent_based.v2 import (
     Service,
     State,
 )
-from cmk.plugins.netapp import models
 
 from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
-Section = Mapping[str, models.NodeModel]
+Section = list[dict[str, Any]]
 
 # Special Agent Output to Parse for this service
 """
