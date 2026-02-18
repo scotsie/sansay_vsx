@@ -45,8 +45,8 @@ metric_sansay_session_utilization_trend = Product(
     unit=unit_percent,
     color=Color.YELLOW,
     factors=[
-        "metric_sansay_session_utilization",
-        "metric_sansay_session_utilization_drop"
+        "session_utilization",
+        "session_utilization_drop",
     ],
 )
 
