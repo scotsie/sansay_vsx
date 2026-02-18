@@ -64,6 +64,9 @@ def discovery_sansay_vsx_system(section: Section) -> DiscoveryResult:
 
 
 def check_sansay_vsx_system(section: Section, params) -> CheckResult:
+    if not section:
+        yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
+        return
     # Static placeholders until I figure out how to incorporate thresholding into the UI
     cpu_upper_crit = 90
     cpu_upper_warn = 80
