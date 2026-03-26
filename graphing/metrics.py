@@ -45,6 +45,13 @@ metric_sansay_session_utilization_drop = Metric(
     color=Color.YELLOW,
 )
 
+metric_sansay_session_utilization_avg = Metric(
+    name="session_utilization_avg",
+    title=Title("Session Utilization (Rolling Avg)"),
+    unit=unit_percent,
+    color=Color.CYAN,
+)
+
 metric_sansay_session_utilization_trend = Product(
     title=Title("Session Utilization Trend"),
     unit=unit_percent,
@@ -78,10 +85,14 @@ graph_sansay_vsx_system = Graph(
     title=Title("Sansay VSX System Metrics"),
     simple_lines=[
         "cpu_utilization",
-        "metric_sansay_session_utilization_trend"
+        "metric_sansay_session_utilization_trend",
     ],
     compound_lines=[
-        "session_utilization"
+        "session_utilization",
+    ],
+    optional=[
+        # Only emitted when rolling average mode is enabled in check parameters
+        "session_utilization_avg",
     ],
 )
 

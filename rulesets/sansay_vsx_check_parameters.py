@@ -10,8 +10,11 @@ from cmk.rulesets.v1.form_specs import (
     DictElement,
     Dictionary,
     Float,
+    Integer,
     LevelDirection,
     SimpleLevels,
+    SingleChoice,
+    SingleChoiceElement,
     validators,
 )
 from cmk.rulesets.v1.rule_specs import CheckParameters, HostAndItemCondition, HostCondition, Topic
@@ -58,7 +61,8 @@ def _parameter_form_sansay_vsx_system() -> Dictionary:
                     help_text=Help(
                         "Upper warning and critical thresholds for a sudden drop in session "
                         "utilization between check intervals (measured in percentage points). "
-                        "Useful for detecting unexpected call drops or failover events."
+                        "Useful for detecting unexpected call drops or failover events. "
+                        "Select 'No levels' to disable drop alerting."
                     ),
                     form_spec_template=Float(
                         custom_validate=(
@@ -68,6 +72,44 @@ def _parameter_form_sansay_vsx_system() -> Dictionary:
                     level_direction=LevelDirection.UPPER,
                     prefill_fixed_levels=DefaultValue((10.0, 20.0)),
                 ),
+            ),
+            "session_rolling_average": DictElement(
+                parameter_form=SingleChoice(
+                    title=Title("Session utilization measurement"),
+                    help_text=Help(
+                        "Choose whether session utilization thresholds are evaluated against "
+                        "the instantaneous value or a rolling average over a time window. "
+                        "A rolling average reduces false alerts from brief transient spikes "
+                        "while still collecting the raw instantaneous metric for graphing."
+                    ),
+                    elements=[
+                        SingleChoiceElement(
+                            name="instantaneous",
+                            title=Title("Instantaneous (current value)"),
+                        ),
+                        SingleChoiceElement(
+                            name="rolling_average",
+                            title=Title("Rolling average over time window"),
+                        ),
+                    ],
+                    prefill=DefaultValue("instantaneous"),
+                ),
+                required=True,
+            ),
+            "session_rolling_window": DictElement(
+                parameter_form=Integer(
+                    title=Title("Rolling average window (minutes)"),
+                    help_text=Help(
+                        "Number of minutes of history to include in the rolling average. "
+                        "Only used when 'Rolling average' is selected above. "
+                        "Samples outside this window are discarded automatically."
+                    ),
+                    prefill=DefaultValue(15),
+                    custom_validate=(
+                        validators.NumberInRange(min_value=1, max_value=120),
+                    ),
+                ),
+                required=False,
             ),
         },
     )
