@@ -44,7 +44,7 @@ def _valuespec_special_agents_sansay_vsx() -> Dictionary:
                     title=Title("Password"),
                     custom_validate=(validators.LengthInRange(min_value=1),),
                     migrate=migrate_to_password,
-                 ),
+                ),
                 required=True,
             ),
             "proto": DictElement(

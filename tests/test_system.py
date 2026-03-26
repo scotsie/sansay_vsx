@@ -11,7 +11,7 @@ Covers:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from cmk.agent_based.v2 import Metric, Result, Service, State
 

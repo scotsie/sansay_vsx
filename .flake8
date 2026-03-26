@@ -1,12 +1,10 @@
 [flake8]
-# In .style.yapf and .pylintrc we use 100, but in some cases this isn't enforced.
-max-line-length=550
-ignore=
-    ################################################################################################
-    # Miscellaneous stuff
-    ################################################################################################
-    ################################################################################################
-    # Incompatible with YAPF
-    ################################################################################################
-    # unexpected spaces around keyword / parameter equals
-    E251,
+max-line-length = 130
+extend-ignore =
+    # E251: pycodestyle false-positive for Python 3.8+ f-string self-documenting expressions
+    # e.g. f'{value =}' — the space before = is intentional syntax, not a style error
+    E251
+per-file-ignores =
+    # Docstring example blocks show raw agent output and are inherently long single-line JSON
+    agent_based/sansay_vsx_trunks.py:E501
+    agent_based/sansay_vsx_media_stats.py:E501

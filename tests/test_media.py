@@ -12,9 +12,7 @@ Covers:
   - session utilization threshold alerting
 """
 
-import pytest
-
-from cmk.agent_based.v2 import Metric, Result, Service, State
+from cmk.agent_based.v2 import Metric, Result, State
 
 from cmk_addons.plugins.sansay_vsx.agent_based.sansay_vsx_media_stats import (
     check_sansay_vsx_media,

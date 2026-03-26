@@ -5,13 +5,15 @@
 # License: GNU General Public License v2
 
 import json
-from typing import Any, Dict, NamedTuple, Optional, Tuple
-from cmk.agent_based.v2 import DiscoveryResult, Service, StringTable
 import logging
+from typing import Dict, NamedTuple, Optional, Tuple
+
+from cmk.agent_based.v2 import StringTable
 
 
 Levels = Optional[Tuple[float, float]]
 SansayVSXAPIData = Dict[str, object]
+
 
 class Perfdata(NamedTuple):
     """normal monitoring performance data"""
@@ -37,7 +39,6 @@ def parse_sansay_vsx(string_table: StringTable) -> SansayVSXAPIData:
     """parse one line of data to dictionary"""
     try:
         json_data = json.loads(string_table[0][0])
-        #print(f"{json_data}\n{type(json_data)}")
         return json_data
     except (IndexError, json.decoder.JSONDecodeError):
         return {}

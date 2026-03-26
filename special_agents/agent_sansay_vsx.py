@@ -146,7 +146,6 @@ def fetch_sansay_json(args, report_name):
 
         if response.status_code != 200:
             print(f"[{device}] -> ERROR: unable to fetch Sansay '{report_name}' report: {response.status_code} {response.reason}")
-            # print(f"[{device}] -> ERROR: parameters used:\n    {url=}\n    {username=}\n   {password=}\n   {HTTPBasicAuth(username, password)=}\n   {params=}\n   {ssl_verify=}\n    {timeout=}")
             return None
         return response.json()
     except requests.RequestException as e:
@@ -262,7 +261,9 @@ def process_realtime_data(args, data):
                     realtime_row_dict = {fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]}
                     # Ignore realtime trunk data that has the FQDN noted as a group
                     if realtime_row_dict["fqdn"] != "Group":
-                        trunk_realtime_data[realtime_row_dict["trunkId"]] = {fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]}
+                        trunk_realtime_data[realtime_row_dict["trunkId"]] = {
+                            fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]
+                        }
     return system_stat, trunk_realtime_data
 
 

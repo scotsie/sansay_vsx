@@ -12,11 +12,9 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx import (
-    process_media_stats,
     process_realtime_data,
     process_realtime_trunk_data,
     process_resource_data,
-    process_system_stats,
     process_trunk_stats,
     poll_sansay_vsx,
 )
