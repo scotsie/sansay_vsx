@@ -173,7 +173,8 @@ def poll_sansay_vsx(args):
         realtime_system_data, realtime_trunk_data = process_realtime_data(args, realtime_data)
         # stats["system_stat"].update(realtime_system_data["system_stat"])
         stats["system_stat"] = realtime_system_data["system_stat"]
-        stats["trunks"].update(process_realtime_trunk_data(stats["trunks"], realtime_trunk_data))
+        if "trunks" in stats:
+            stats["trunks"].update(process_realtime_trunk_data(stats["trunks"], realtime_trunk_data))
 
     media_data = fetch_sansay_json(args, "media_server")
     if media_data is not None:
@@ -239,6 +240,9 @@ def process_realtime_data(args, data):
     system_stat = {}
     trunk_realtime_data = {}
     for table in tables:
+        if not isinstance(table, dict):
+            LOGGER.warning("Skipping non-dict table entry: %s", table)
+            continue
         table_count += 1
         table_name = table["name"]
         if args.debug:
