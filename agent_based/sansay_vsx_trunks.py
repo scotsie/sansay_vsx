@@ -91,6 +91,9 @@ def discovery_sansay_vsx_trunks(section: Section) -> DiscoveryResult:
 
 def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
     trunk_id = item.split()[0]
+    if trunk_id not in section:
+        yield Result(state=State.UNKNOWN, summary=f"Trunk {trunk_id} not found in agent data")
+        return
     trunk_data = section[trunk_id]
     yield Result(
         state=State.OK,

@@ -192,6 +192,9 @@ def process_resource_data(args, data):
     trunks = {}
     tables = data["mysqldump"]["database"]["table"]
     for table in tables:
+        if not isinstance(table, dict):
+            LOGGER.warning("Skipping non-dict resource table entry: %s", table)
+            continue
         if args.debug:
             print(f"Processing entries in {table}.")
 
@@ -348,7 +351,9 @@ def process_trunk_stats(args, stats):
         stats["trunks"][trunk].pop("realtime_stat")
 
         # Ingress and Egress calculations for the trunk
+        _direction_name_map = {"ingress_stat": "ingress", "gw_egress_stat": "egress"}
         for direction in ["ingress_stat", "gw_egress_stat"]:
+            normalized = _direction_name_map[direction]
             PDDms = float(data[direction].get('1st15mins_pdd_ms', 0))
             CA = float(data[direction].get('1st15mins_call_attempt', 0))
             CD = float(data[direction].get('1st15mins_call_durationSec', 0))
@@ -356,7 +361,7 @@ def process_trunk_stats(args, stats):
             CAns = float(data[direction].get('1st15mins_call_answer', 0))
 
             if CA > 0:
-                calculated_stats[direction] = {
+                calculated_stats[normalized] = {
                     'avg_postdial_delay': round((PDDms / CA) / 1000, 1),
                     'avg_call_duration': round(CD / CA, 1),
                     'failed_call_ratio': round((FC / CA) * 100, 1),
