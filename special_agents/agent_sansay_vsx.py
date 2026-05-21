@@ -171,8 +171,10 @@ def poll_sansay_vsx(args):
     realtime_data = fetch_sansay_json(args, "realtime")
     if realtime_data is not None:
         realtime_system_data, realtime_trunk_data = process_realtime_data(args, realtime_data)
-        # stats["system_stat"].update(realtime_system_data["system_stat"])
-        stats["system_stat"] = realtime_system_data["system_stat"]
+        if "system_stat" in realtime_system_data:
+            stats["system_stat"] = realtime_system_data["system_stat"]
+        else:
+            print(f"[{device}] -> No system_stat found in realtime response data.")
         if "trunks" in stats:
             stats["trunks"].update(process_realtime_trunk_data(stats["trunks"], realtime_trunk_data))
 
@@ -190,9 +192,12 @@ def process_resource_data(args, data):
         return
 
     trunks = {}
-    tables = data.get("mysqldump", {}).get("database", {}).get("table")
+    db = data.get("mysqldump", {}).get("database", {})
+    tables = db.get("table")
+    if not isinstance(tables, list):
+        tables = db.get("table_data")
     if not tables:
-        print(f"[{device}] -> unable to parse resource 'table' key from json response data.\n{data}")
+        print(f"[{device}] -> unable to parse resource 'table'/'table_data' key from json response data.\n{data}")
         return trunks
     for table in tables:
         if not isinstance(table, dict):
@@ -245,9 +250,12 @@ def process_realtime_data(args, data):
         print(f"[{device}] -> unable to parse table from json response data.\n{data}")
         return
 
-    tables = data.get("mysqldump", {}).get("database", {}).get("table")
+    db = data.get("mysqldump", {}).get("database", {})
+    tables = db.get("table")
+    if not isinstance(tables, list):
+        tables = db.get("table_data")
     if not tables:
-        print(f"[{device}] -> unable to parse realtime 'table' key from json response data.\n{data}")
+        print(f"[{device}] -> unable to parse realtime 'table'/'table_data' key from json response data.\n{data}")
         return {}, {}
     table_count = 0
     system_stat = {}
