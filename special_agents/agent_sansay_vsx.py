@@ -141,8 +141,9 @@ def fetch_sansay_json(args, report_name):
             verify=ssl_verify,
             timeout=timeout,
         )
-        if ssl_verify and args.debug:
-            print(f"[{device}] -> fetching Sansay VSX {report_name} stats (complete)")
+        if args.debug:
+            print(f"[{device}] -> {report_name} HTTP {response.status_code}: {len(response.content)} bytes")
+            print(f"[{device}] -> {report_name} raw response:\n{response.text}")
 
         if response.status_code != 200:
             print(f"[{device}] -> ERROR: unable to fetch Sansay '{report_name}' report: {response.status_code} {response.reason}")
@@ -189,7 +190,10 @@ def process_resource_data(args, data):
         return
 
     trunks = {}
-    tables = data["mysqldump"]["database"]["table"]
+    tables = data.get("mysqldump", {}).get("database", {}).get("table")
+    if not tables:
+        print(f"[{device}] -> unable to parse resource 'table' key from json response data.\n{data}")
+        return trunks
     for table in tables:
         if not isinstance(table, dict):
             LOGGER.warning("Skipping non-dict resource table entry: %s", table)
@@ -197,7 +201,11 @@ def process_resource_data(args, data):
         if args.debug:
             print(f"Processing entries in {table}.")
 
-        for row in table["row"]:
+        rows = table.get("row")
+        if not rows:
+            print(f"[{device}] -> Skipping table '{table.get('name', '?')}' with no row data.")
+            continue
+        for row in rows:
             # Convert the list dictionaries with name and content values into
             # a single dictionary with the name as key and content as value.
             row_dict = {field["name"]: field["content"] for field in row["field"]}
@@ -237,7 +245,10 @@ def process_realtime_data(args, data):
         print(f"[{device}] -> unable to parse table from json response data.\n{data}")
         return
 
-    tables = data["mysqldump"]["database"]["table"]
+    tables = data.get("mysqldump", {}).get("database", {}).get("table")
+    if not tables:
+        print(f"[{device}] -> unable to parse realtime 'table' key from json response data.\n{data}")
+        return {}, {}
     table_count = 0
     system_stat = {}
     trunk_realtime_data = {}
@@ -293,7 +304,14 @@ def process_media_data(args, media_data):
     if media_data is None:
         print(f"[{device}] -> unable to parse XBMediaServerRealTimeStat from jsondata: {media_data}")
         return
-    media_servers = media_data["XBMediaServerRealTimeStatList"]["XBMediaServerRealTimeStat"]
+    stat_list = media_data.get("XBMediaServerRealTimeStatList")
+    if not isinstance(stat_list, dict):
+        print(f"[{device}] -> unexpected media server response structure (XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
+        return None
+    media_servers = stat_list.get("XBMediaServerRealTimeStat")
+    if media_servers is None:
+        print(f"[{device}] -> unable to parse 'XBMediaServerRealTimeStat' key from jsondata: {media_data}")
+        return None
     return media_servers
 
 
