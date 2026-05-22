@@ -405,11 +405,11 @@ def process_trunk_stats(args, stats):
         _direction_name_map = {"ingress_stat": "ingress", "gw_egress_stat": "egress"}
         for direction in ["ingress_stat", "gw_egress_stat"]:
             normalized = _direction_name_map[direction]
-            PDDms = float(data[direction].get('1st15mins_pdd_ms', 0))
-            CA = float(data[direction].get('1st15mins_call_attempt', 0))
-            CD = float(data[direction].get('1st15mins_call_durationSec', 0))
-            FC = float(data[direction].get('1st15mins_call_fail', 0))
-            CAns = float(data[direction].get('1st15mins_call_answer', 0))
+            PDDms = float(data[direction].get('1h_pdd_ms', 0))
+            CA = float(data[direction].get('1h_call_attempt', 0))
+            CD = float(data[direction].get('1h_call_durationSec', 0))
+            FC = float(data[direction].get('1h_call_fail', 0))
+            CAns = float(data[direction].get('1h_call_answer', 0))
 
             if CA > 0:
                 calculated_stats[normalized] = {
