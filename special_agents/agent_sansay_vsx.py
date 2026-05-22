@@ -196,6 +196,12 @@ def process_resource_data(args, data):
         return
 
     trunks = {}
+    # Two API response formats have been observed across device generations:
+    #   Old response: database.table (list) contains ingress_stat and gw_egress_stat
+    #     entries with row data inline. No table_structure key present.
+    #   New response: database.table_data (list) contains the same table entries;
+    #     database.table_structure (list) carries schema definitions separately.
+    #     The table key is absent entirely in the resource response.
     db = data.get("mysqldump", {}).get("database", {})
     tables = db.get("table")
     if not isinstance(tables, list):
@@ -254,6 +260,20 @@ def process_realtime_data(args, data):
         print(f"[{device}] -> unable to parse table from json response data.\n{data}")
         return
 
+    # Two API response formats have been observed across device generations:
+    #   Old response: database.table (list) contains system_stat (single row),
+    #     gw_realtime_stat (always empty), and XBResourceRealTimeStatList (empty
+    #     when no active sessions; rows keyed by trunkId when sessions are active,
+    #     with fields: trunkId, fqdn, numOrig, numTerm, cps, numPeak, totalCLZ,
+    #     numCLZCps, totalLimit, cpsLimit).
+    #   New response: database.table_data (list) contains system_stat and
+    #     gw_realtime_stat. XBResourceRealTimeStatList is absent from table_data;
+    #     database.table is a stray single dict {"name": "XBResourceRealTimeStatList"}
+    #     and is NOT a list. When new response devices have active sessions,
+    #     gw_realtime_stat rows are expected to appear in table_data with fields:
+    #     orig_tid, orig_ip, term_tid, term_ip, num_active_session,
+    #     peak_active_session, active_cps. Field mapping to the existing realtime
+    #     stat structure is a known gap pending capture from a live device under load.
     db = data.get("mysqldump", {}).get("database", {})
     tables = db.get("table")
     if not isinstance(tables, list):
