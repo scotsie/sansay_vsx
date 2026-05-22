@@ -15,6 +15,7 @@ from cmk.agent_based.v2 import Metric, Result, State
 
 from cmk_addons.plugins.sansay_vsx.agent_based.sansay_vsx_trunks import (
     check_sansay_vsx_trunks,
+    cluster_check_sansay_vsx_trunks,
     discovery_sansay_vsx_trunks,
 )
 
@@ -207,3 +208,48 @@ class TestCheckThresholds:
         ))
         states = [r.state for r in results if isinstance(r, Result)]
         assert State.WARN in states
+
+
+# ---------------------------------------------------------------------------
+# Cluster check
+# ---------------------------------------------------------------------------
+
+class TestClusterCheckSansayVsxTrunks:
+    SECTION_WITH_DATA = {"phl-sansay-01": SECTION, "phl-sansay-02": {}}
+
+    def test_active_node_data_used(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        assert any(isinstance(r, Result) and r.state != State.UNKNOWN for r in results)
+
+    def test_active_node_name_in_result_summary(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        summaries = [r.summary for r in results if isinstance(r, Result)]
+        assert any("phl-sansay-01" in s for s in summaries)
+
+    def test_metrics_still_yielded(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        metric_names = {r.name for r in results if isinstance(r, Metric)}
+        assert "ingress_failed_call_ratio" in metric_names
+
+    def test_both_nodes_empty_yields_unknown(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In",
+            params=DEFAULT_PARAMS,
+            section={"phl-sansay-01": {}, "phl-sansay-02": {}},
+        ))
+        assert len(results) == 1
+        assert results[0].state == State.UNKNOWN
+
+    def test_none_node_falls_through_to_active(self):
+        """Agent unreachable on one node (None) — other node provides data."""
+        section = {"phl-sansay-01": None, "phl-sansay-02": SECTION}
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=section,
+        ))
+        assert any(isinstance(r, Result) and r.state != State.UNKNOWN for r in results)

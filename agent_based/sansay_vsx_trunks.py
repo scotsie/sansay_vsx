@@ -12,6 +12,7 @@ from cmk.agent_based.v2 import (
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
+    make_node_notice_results,
     Metric,
     Result,
     Service,
@@ -22,6 +23,7 @@ from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
 Section = Mapping[str, Any]
+ClusterSection = Mapping[str, Section | None]
 
 # Special Agent Output to Parse for this service
 """
@@ -141,12 +143,25 @@ def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
                 )
 
 
+def cluster_check_sansay_vsx_trunks(item, params, section: ClusterSection) -> CheckResult:
+    trunk_id = item.split()[0]
+    for node_name, node_section in section.items():
+        if node_section and trunk_id in node_section:
+            yield from make_node_notice_results(
+                node_name,
+                check_sansay_vsx_trunks(item, params, node_section),
+            )
+            return
+    yield Result(state=State.UNKNOWN, summary=f"No active node has trunk data for {trunk_id}")
+
+
 check_plugin_sansay_vsx_trunks = CheckPlugin(
     name="sansay_vsx_trunks",
     service_name="VSX trunk %s",
     discovery_function=discovery_sansay_vsx_trunks,
     sections=["sansay_vsx_trunks"],
     check_function=check_sansay_vsx_trunks,
+    cluster_check_function=cluster_check_sansay_vsx_trunks,
     check_ruleset_name="sansay_vsx_trunks",
     check_default_parameters={
         "egress": {

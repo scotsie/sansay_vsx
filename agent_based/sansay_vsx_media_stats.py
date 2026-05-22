@@ -4,6 +4,7 @@
 # License: GNU General Public License v2
 
 
+from collections.abc import Mapping
 from typing import Any
 
 from cmk.agent_based.v2 import (
@@ -11,6 +12,7 @@ from cmk.agent_based.v2 import (
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
+    make_node_notice_results,
     Metric,
     Result,
     Service,
@@ -21,6 +23,7 @@ from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
 Section = list[dict[str, Any]]
+ClusterSection = Mapping[str, Section | None]
 
 # Special Agent Output to Parse for this service
 """
@@ -97,12 +100,24 @@ def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
         )
 
 
+def cluster_check_sansay_vsx_media(item, params, section: ClusterSection) -> CheckResult:
+    for node_name, node_section in section.items():
+        if node_section:
+            yield from make_node_notice_results(
+                node_name,
+                check_sansay_vsx_media(item, params, node_section),
+            )
+            return
+    yield Result(state=State.UNKNOWN, summary=f"No active node has media data for '{item}'")
+
+
 check_plugin_sansay_vsx_media = CheckPlugin(
     name="sansay_vsx_media",
     service_name="VSX Media Server %s",
     discovery_function=discovery_sansay_vsx_media,
     sections=["sansay_vsx_media"],
     check_function=check_sansay_vsx_media,
+    cluster_check_function=cluster_check_sansay_vsx_media,
     check_ruleset_name="sansay_vsx_media",
     check_default_parameters={
         "session_levels": ("fixed", (80.0, 90.0)),
