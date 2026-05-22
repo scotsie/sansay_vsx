@@ -69,6 +69,55 @@ def _check_levels(value: float, level_spec: tuple, bound: str = "upper") -> int:
     return 0
 
 
+def _check_ha_state(section: Section) -> CheckResult:
+    ha_state = section.get("ha_current_state")
+    if not ha_state:
+        return
+
+    switch_over_flag = int(section.get("switch_over_flag", 3))
+    ha_remote_status = int(section.get("ha_remote_status", 0))
+    ha_local_status = int(section.get("ha_local_status", 0))
+    ha_pre_state = section.get("ha_pre_state", "")
+
+    if switch_over_flag != 3:
+        yield Result(
+            state=State.WARN,
+            summary=f"HA: Switchover in progress (flag={switch_over_flag})",
+        )
+        return
+
+    if ha_state == "standalone":
+        yield Result(state=State.OK, summary="HA: Standalone")
+        return
+
+    if ha_state == "oos":
+        yield Result(state=State.CRIT, summary="HA: Node out of service")
+        return
+
+    if ha_state == "boot":
+        yield Result(state=State.WARN, summary="HA: Node booting")
+        return
+
+    # "active" or "standby" — normal operating states
+    pre_text = f", was: {ha_pre_state}" if ha_pre_state and ha_pre_state != ha_state else ""
+
+    if ha_local_status != 0:
+        yield Result(
+            state=State.WARN,
+            summary=f"HA: {ha_state.capitalize()}, local unhealthy (status={ha_local_status}){pre_text}",
+        )
+    elif ha_remote_status != 0:
+        yield Result(
+            state=State.WARN,
+            summary=f"HA: {ha_state.capitalize()}, peer unhealthy (status={ha_remote_status}){pre_text}",
+        )
+    else:
+        yield Result(
+            state=State.OK,
+            summary=f"HA: {ha_state.capitalize()}, peer healthy{pre_text}",
+        )
+
+
 def _rolling_average(
     current_value: float,
     now: float,
@@ -102,6 +151,9 @@ def check_sansay_vsx_system(params, section: Section) -> CheckResult:
         return
 
     value_store = get_value_store()
+
+    # --- HA state ---
+    yield from _check_ha_state(section)
 
     # --- CPU utilization ---
     cpu_utilization = 100.0 - section["cpu_idle_percent"]
