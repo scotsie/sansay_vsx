@@ -12,7 +12,6 @@ from cmk.agent_based.v2 import (
     CheckPlugin,
     CheckResult,
     DiscoveryResult,
-    make_node_notice_results,
     Metric,
     Result,
     Service,
@@ -147,10 +146,8 @@ def cluster_check_sansay_vsx_trunks(item, params, section: ClusterSection) -> Ch
     trunk_id = item.split()[0]
     for node_name, node_section in section.items():
         if node_section and trunk_id in node_section:
-            yield from make_node_notice_results(
-                node_name,
-                check_sansay_vsx_trunks(item, params, node_section),
-            )
+            yield Result(state=State.OK, summary=f"Active node: {node_name}")
+            yield from check_sansay_vsx_trunks(item, params, node_section)
             return
     yield Result(state=State.UNKNOWN, summary=f"No active node has trunk data for {trunk_id}")
 
