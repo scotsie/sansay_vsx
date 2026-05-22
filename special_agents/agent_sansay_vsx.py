@@ -102,7 +102,11 @@ def fetch_sansay_json(args, report_name):
         match args.password:
             case str() if re.match(r'^[a-zA-Z0-9-]+:/[a-zA-Z0-9/_]+$', args.password):
                 uuid, path = args.password.split(':')
-                password = password_store.lookup(pw_file=Path(path), pw_id=uuid)
+                try:
+                    password = password_store.lookup(pw_file=Path(path), pw_id=uuid)
+                except ValueError as e:
+                    print(f"[{device}] -> ERROR: password store lookup failed: {e}")
+                    return None
             case str() if re.match(r'^[a-zA-Z0-9]+$', args.password):
                 password = args.password
             case other:
