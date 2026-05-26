@@ -339,7 +339,8 @@ def process_media_data(args, media_data):
         return
     stat_list = media_data.get("XBMediaServerRealTimeStatList")
     if not isinstance(stat_list, dict):
-        print(f"[{device}] -> unexpected media server response structure (XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
+        print(f"[{device}] -> unexpected media server response structure "
+              f"(XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
         return None
     media_servers = stat_list.get("XBMediaServerRealTimeStat")
     if media_servers is None:
