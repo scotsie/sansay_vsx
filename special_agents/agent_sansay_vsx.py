@@ -97,6 +97,7 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
 def fetch_sansay_json(args, report_name):
     if args.debug:
         print(f"{args=}")
+    device = args.host
     password = None
     if args.password:
         match args.password:
@@ -113,7 +114,6 @@ def fetch_sansay_json(args, report_name):
                 raise TypeError(other)
 
     username = args.user
-    device = args.host
     protocol = args.proto
     port = args.port
     ssl_verify = args.verify_ssl
@@ -166,6 +166,7 @@ def poll_sansay_vsx(args):
       - media_server - media server statistics
     """
 
+    device = args.host
     stats = {}
 
     resource_data = fetch_sansay_json(args, "resource")

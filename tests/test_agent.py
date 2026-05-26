@@ -425,3 +425,20 @@ class TestPollSansayVsx:
             mock_fetch.return_value = None
             result = poll_sansay_vsx(args)
         assert result == {}
+
+    def test_empty_dict_realtime_does_not_crash(self):
+        """
+        Regression (crash 2026-05-24): realtime endpoint returns {} (empty dict,
+        not None) during a known failover event.  process_realtime_data returns
+        ({}, {}) so system_stat is absent — the subsequent log line referenced
+        'device' which was undefined in poll_sansay_vsx, raising NameError.
+        """
+        args = make_args()
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = [RESOURCE_DATA, {}, None]
+            result = poll_sansay_vsx(args)
+        assert "trunks" in result
+        assert "100" in result["trunks"]
+        assert "system_stat" not in result
