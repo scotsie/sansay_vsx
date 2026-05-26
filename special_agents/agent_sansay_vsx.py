@@ -97,6 +97,7 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
 def fetch_sansay_json(args, report_name):
     if args.debug:
         print(f"{args=}")
+    device = args.host
     password = None
     if args.password:
         match args.password:
@@ -113,7 +114,6 @@ def fetch_sansay_json(args, report_name):
                 raise TypeError(other)
 
     username = args.user
-    device = args.host
     protocol = args.proto
     port = args.port
     ssl_verify = args.verify_ssl
@@ -166,6 +166,7 @@ def poll_sansay_vsx(args):
       - media_server - media server statistics
     """
 
+    device = args.host
     stats = {}
 
     resource_data = fetch_sansay_json(args, "resource")
@@ -338,7 +339,8 @@ def process_media_data(args, media_data):
         return
     stat_list = media_data.get("XBMediaServerRealTimeStatList")
     if not isinstance(stat_list, dict):
-        print(f"[{device}] -> unexpected media server response structure (XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
+        print(f"[{device}] -> unexpected media server response structure "
+              f"(XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
         return None
     media_servers = stat_list.get("XBMediaServerRealTimeStat")
     if media_servers is None:
@@ -405,11 +407,11 @@ def process_trunk_stats(args, stats):
         _direction_name_map = {"ingress_stat": "ingress", "gw_egress_stat": "egress"}
         for direction in ["ingress_stat", "gw_egress_stat"]:
             normalized = _direction_name_map[direction]
-            PDDms = float(data[direction].get('1st15mins_pdd_ms', 0))
-            CA = float(data[direction].get('1st15mins_call_attempt', 0))
-            CD = float(data[direction].get('1st15mins_call_durationSec', 0))
-            FC = float(data[direction].get('1st15mins_call_fail', 0))
-            CAns = float(data[direction].get('1st15mins_call_answer', 0))
+            PDDms = float(data[direction].get('1h_pdd_ms', 0))
+            CA = float(data[direction].get('1h_call_attempt', 0))
+            CD = float(data[direction].get('1h_call_durationSec', 0))
+            FC = float(data[direction].get('1h_call_fail', 0))
+            CAns = float(data[direction].get('1h_call_answer', 0))
 
             if CA > 0:
                 calculated_stats[normalized] = {

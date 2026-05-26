@@ -34,10 +34,23 @@ SECTION_NORMAL = {
     "cluster_active_session": 100,
     "ha_current_state": "active",
     "ha_pre_state": "standby",
+    "ha_local_status": 0,
+    "ha_remote_status": 0,
+    "switch_over_flag": 3,
 }
 
 SECTION_HIGH_CPU = {**SECTION_NORMAL, "cpu_idle_percent": 5}    # 95% utilization
 SECTION_WARN_CPU = {**SECTION_NORMAL, "cpu_idle_percent": 15}   # 85% utilization
+
+SECTION_STANDBY = {**SECTION_NORMAL, "ha_current_state": "standby", "ha_pre_state": "oos"}
+SECTION_STANDBY_PEER_UNHEALTHY = {**SECTION_STANDBY, "ha_remote_status": 1}
+SECTION_ACTIVE_PEER_UNHEALTHY = {**SECTION_NORMAL, "ha_remote_status": 1}
+SECTION_LOCAL_UNHEALTHY = {**SECTION_NORMAL, "ha_local_status": 2}
+SECTION_STANDALONE = {**SECTION_NORMAL, "ha_current_state": "standalone", "ha_pre_state": ""}
+SECTION_OOS = {**SECTION_NORMAL, "ha_current_state": "oos"}
+SECTION_BOOT = {**SECTION_NORMAL, "ha_current_state": "boot"}
+SECTION_SWITCHOVER = {**SECTION_NORMAL, "switch_over_flag": 1}
+SECTION_NO_HA_FIELD = {k: v for k, v in SECTION_NORMAL.items() if k != "ha_current_state"}
 
 
 def _check(section, params=None, value_store=None):
@@ -178,3 +191,90 @@ class TestCheckSessionDrop:
         _check(SECTION_NORMAL, value_store=vs)
         assert "sansay_vsx.session_utilization" in vs
         assert vs["sansay_vsx.session_utilization"] == pytest.approx(10.0)
+
+
+# ---------------------------------------------------------------------------
+# Check — HA state
+# ---------------------------------------------------------------------------
+
+def _ha_result(section, params=None):
+    """Return only the HA-related Result from the check output."""
+    results = _check(section, params=params)
+    return [r for r in results if isinstance(r, Result) and "HA:" in r.summary]
+
+
+class TestCheckHaState:
+    def test_active_peer_healthy_is_ok(self):
+        ha = _ha_result(SECTION_NORMAL)
+        assert len(ha) == 1
+        assert ha[0].state == State.OK
+
+    def test_active_peer_healthy_summary(self):
+        ha = _ha_result(SECTION_NORMAL)
+        assert "Active" in ha[0].summary
+        assert "peer healthy" in ha[0].summary
+
+    def test_active_shows_pre_state_when_different(self):
+        # ha_pre_state="standby" differs from ha_current_state="active" → shown
+        ha = _ha_result(SECTION_NORMAL)
+        assert "was: standby" in ha[0].summary
+
+    def test_active_omits_pre_state_when_same(self):
+        section = {**SECTION_NORMAL, "ha_pre_state": "active"}
+        ha = _ha_result(section)
+        assert "was:" not in ha[0].summary
+
+    def test_active_peer_unhealthy_is_warn(self):
+        ha = _ha_result(SECTION_ACTIVE_PEER_UNHEALTHY)
+        assert ha[0].state == State.WARN
+
+    def test_active_peer_unhealthy_summary(self):
+        ha = _ha_result(SECTION_ACTIVE_PEER_UNHEALTHY)
+        assert "peer unhealthy" in ha[0].summary
+
+    def test_standby_peer_healthy_is_ok(self):
+        ha = _ha_result(SECTION_STANDBY)
+        assert ha[0].state == State.OK
+
+    def test_standby_peer_healthy_summary(self):
+        ha = _ha_result(SECTION_STANDBY)
+        assert "Standby" in ha[0].summary
+        assert "peer healthy" in ha[0].summary
+
+    def test_standby_peer_unhealthy_is_warn(self):
+        ha = _ha_result(SECTION_STANDBY_PEER_UNHEALTHY)
+        assert ha[0].state == State.WARN
+
+    def test_local_unhealthy_is_warn(self):
+        ha = _ha_result(SECTION_LOCAL_UNHEALTHY)
+        assert ha[0].state == State.WARN
+        assert "local unhealthy" in ha[0].summary
+
+    def test_standalone_is_ok(self):
+        ha = _ha_result(SECTION_STANDALONE)
+        assert ha[0].state == State.OK
+        assert "Standalone" in ha[0].summary
+
+    def test_oos_is_crit(self):
+        ha = _ha_result(SECTION_OOS)
+        assert ha[0].state == State.CRIT
+        assert "out of service" in ha[0].summary
+
+    def test_boot_is_warn(self):
+        ha = _ha_result(SECTION_BOOT)
+        assert ha[0].state == State.WARN
+        assert "booting" in ha[0].summary
+
+    def test_switchover_is_warn(self):
+        ha = _ha_result(SECTION_SWITCHOVER)
+        assert ha[0].state == State.WARN
+        assert "Switchover" in ha[0].summary
+
+    def test_no_ha_field_emits_no_ha_result(self):
+        ha = _ha_result(SECTION_NO_HA_FIELD)
+        assert ha == []
+
+    def test_cpu_check_still_runs_alongside_ha(self):
+        results = _check(SECTION_NORMAL)
+        cpu_results = [r for r in results if isinstance(r, Result) and "CPU" in r.summary]
+        assert len(cpu_results) == 1

@@ -4,7 +4,7 @@ Tests for the sansay_vsx_trunks check plugin.
 
 Covers:
   - discovery yields one service per trunk
-  - check returns UNKNOWN when trunk is absent from section (crash 2026-02-19)
+  - check returns OK with zero metrics when trunk is absent (failover/no-data case)
   - check returns OK with correct metrics for a healthy trunk
   - threshold alerting for egress/ingress/realtime directions
 """
@@ -15,6 +15,7 @@ from cmk.agent_based.v2 import Metric, Result, State
 
 from cmk_addons.plugins.sansay_vsx.agent_based.sansay_vsx_trunks import (
     check_sansay_vsx_trunks,
+    cluster_check_sansay_vsx_trunks,
     discovery_sansay_vsx_trunks,
 )
 
@@ -112,24 +113,31 @@ class TestDiscoverySansayVsxTrunks:
 
 
 # ---------------------------------------------------------------------------
-# Check — missing trunk (crash regression)
+# Check — missing trunk (failover / no-data case)
 # ---------------------------------------------------------------------------
 
 class TestCheckMissingTrunk:
-    def test_unknown_when_trunk_absent_from_section(self):
+    def test_ok_with_no_traffic_when_trunk_absent(self):
         """
         Regression (crash 2026-02-19): trunk service exists but trunk ID is no
-        longer in the agent data.  Must yield UNKNOWN rather than KeyError.
+        longer in the agent data (e.g. post-failover before first call).
+        Must yield OK with 'no call traffic' rather than UNKNOWN or KeyError.
         """
         results = list(check_sansay_vsx_trunks(
             item="99989 Transnexus Osprey",
             params=DEFAULT_PARAMS,
             section=SECTION,
         ))
-        assert len(results) == 1
-        assert isinstance(results[0], Result)
-        assert results[0].state == State.UNKNOWN
-        assert "99989" in results[0].summary
+        result_items = [r for r in results if isinstance(r, Result)]
+        metric_items = [r for r in results if isinstance(r, Metric)]
+        assert len(result_items) == 1
+        assert result_items[0].state == State.OK
+        assert "no call traffic" in result_items[0].summary
+        metric_names = {m.name for m in metric_items}
+        assert "ingress_failed_call_ratio" in metric_names
+        assert "egress_avg_call_duration" in metric_names
+        assert "realtime_origination_sessions" in metric_names
+        assert all(m.value == 0.0 for m in metric_items)
 
 
 # ---------------------------------------------------------------------------
@@ -207,3 +215,53 @@ class TestCheckThresholds:
         ))
         states = [r.state for r in results if isinstance(r, Result)]
         assert State.WARN in states
+
+
+# ---------------------------------------------------------------------------
+# Cluster check
+# ---------------------------------------------------------------------------
+
+class TestClusterCheckSansayVsxTrunks:
+    SECTION_WITH_DATA = {"phl-sansay-01": SECTION, "phl-sansay-02": {}}
+
+    def test_active_node_data_used(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        assert any(isinstance(r, Result) and r.state != State.UNKNOWN for r in results)
+
+    def test_active_node_name_in_result_summary(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        summaries = [r.summary for r in results if isinstance(r, Result)]
+        assert any("phl-sansay-01" in s for s in summaries)
+
+    def test_metrics_still_yielded(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=self.SECTION_WITH_DATA,
+        ))
+        metric_names = {r.name for r in results if isinstance(r, Metric)}
+        assert "ingress_failed_call_ratio" in metric_names
+
+    def test_both_nodes_empty_yields_ok_with_no_traffic(self):
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In",
+            params=DEFAULT_PARAMS,
+            section={"phl-sansay-01": {}, "phl-sansay-02": {}},
+        ))
+        result_items = [r for r in results if isinstance(r, Result)]
+        metric_items = [r for r in results if isinstance(r, Metric)]
+        assert len(result_items) == 1
+        assert result_items[0].state == State.OK
+        assert "no call traffic" in result_items[0].summary
+        assert len(metric_items) > 0
+        assert all(m.value == 0.0 for m in metric_items)
+
+    def test_none_node_falls_through_to_active(self):
+        """Agent unreachable on one node (None) — other node provides data."""
+        section = {"phl-sansay-01": None, "phl-sansay-02": SECTION}
+        results = list(cluster_check_sansay_vsx_trunks(
+            item="100 Carrier In", params=DEFAULT_PARAMS, section=section,
+        ))
+        assert any(isinstance(r, Result) and r.state != State.UNKNOWN for r in results)

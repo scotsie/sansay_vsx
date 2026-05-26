@@ -22,6 +22,7 @@ from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
 
 
 Section = Mapping[str, Any]
+ClusterSection = Mapping[str, Section | None]
 
 # Special Agent Output to Parse for this service
 """
@@ -51,6 +52,27 @@ Section comes in as a list within a list containing the dictionary as a string.
 Parser 'parse_sansay_vsx' is in sansay_vsx.lib. It filters out the string and performs a json.load.
 [['{values above}']]
 """
+
+_ZERO_STATS: dict[str, dict[str, float]] = {
+    "ingress": {
+        "avg_postdial_delay": 0.0,
+        "avg_call_duration": 0.0,
+        "failed_call_ratio": 0.0,
+        "answer_seize_ratio": 0.0,
+    },
+    "egress": {
+        "avg_postdial_delay": 0.0,
+        "avg_call_duration": 0.0,
+        "failed_call_ratio": 0.0,
+        "answer_seize_ratio": 0.0,
+    },
+    "realtime": {
+        "origination_sessions": 0.0,
+        "origination_utilization": 0.0,
+        "termination_sessions": 0.0,
+        "termination_utilization": 0.0,
+    },
+}
 
 # Maps (direction_group, metric_name) -> "upper" or "lower" bound direction.
 # Metrics absent from this table are emitted as Metrics only with no alerting.
@@ -92,7 +114,10 @@ def discovery_sansay_vsx_trunks(section: Section) -> DiscoveryResult:
 def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
     trunk_id = item.split()[0]
     if trunk_id not in section:
-        yield Result(state=State.UNKNOWN, summary=f"Trunk {trunk_id} not found in agent data")
+        yield Result(state=State.OK, summary=f"Trunk {trunk_id}: no call traffic")
+        for direction, metrics in _ZERO_STATS.items():
+            for metric, value in metrics.items():
+                yield Metric(name=f"{direction}_{metric}", value=value)
         return
     trunk_data = section[trunk_id]
     yield Result(
@@ -141,12 +166,26 @@ def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
                 )
 
 
+def cluster_check_sansay_vsx_trunks(item, params, section: ClusterSection) -> CheckResult:
+    trunk_id = item.split()[0]
+    for node_name, node_section in section.items():
+        if node_section and trunk_id in node_section:
+            yield Result(state=State.OK, summary=f"Active node: {node_name}")
+            yield from check_sansay_vsx_trunks(item, params, node_section)
+            return
+    yield Result(state=State.OK, summary=f"Trunk {trunk_id}: no call traffic")
+    for direction, metrics in _ZERO_STATS.items():
+        for metric, value in metrics.items():
+            yield Metric(name=f"{direction}_{metric}", value=value)
+
+
 check_plugin_sansay_vsx_trunks = CheckPlugin(
     name="sansay_vsx_trunks",
     service_name="VSX trunk %s",
     discovery_function=discovery_sansay_vsx_trunks,
     sections=["sansay_vsx_trunks"],
     check_function=check_sansay_vsx_trunks,
+    cluster_check_function=cluster_check_sansay_vsx_trunks,
     check_ruleset_name="sansay_vsx_trunks",
     check_default_parameters={
         "egress": {
