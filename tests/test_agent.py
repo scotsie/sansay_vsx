@@ -387,6 +387,42 @@ class TestProcessTrunkStats:
         result = process_trunk_stats(make_args(), {})
         assert result is None
 
+    def test_missing_realtime_stat_does_not_crash(self):
+        """
+        Regression (crash report): when the 'realtime' endpoint fails to fetch
+        (timeout/error), poll_sansay_vsx never merges realtime_stat into any
+        trunk. process_trunk_stats used to do data["realtime_stat"] unconditionally,
+        raising KeyError('realtime_stat'). It must now default to zeros instead.
+        """
+        trunks = {
+            "100": {
+                "alias": "Level 3 - L3LI-LEX-T38-LEX",
+                "recid": "1",
+                "ingress_stat": {
+                    "1h_pdd_ms": "336000",
+                    "1h_call_attempt": "4428",
+                    "1h_call_durationSec": "439081",
+                    "1h_call_fail": "548",
+                    "1h_call_answer": "3215",
+                },
+                "gw_egress_stat": {
+                    "1h_pdd_ms": "55830",
+                    "1h_call_attempt": "41",
+                    "1h_call_durationSec": "814",
+                    "1h_call_fail": "17",
+                    "1h_call_answer": "7",
+                },
+                # no "realtime_stat" key present, matching a poll where the
+                # realtime fetch failed entirely.
+            }
+        }
+        result = process_trunk_stats(make_args(), {"trunks": trunks})
+        realtime = result["100"]["calculated_stats"]["realtime"]
+        assert realtime["origination_sessions"] == 0
+        assert realtime["termination_sessions"] == 0
+        assert realtime["origination_utilization"] == 0
+        assert "realtime_stat" not in result["100"]
+
 
 # ---------------------------------------------------------------------------
 # poll_sansay_vsx — integration of fetch + processing
@@ -442,3 +478,20 @@ class TestPollSansayVsx:
         assert "trunks" in result
         assert "100" in result["trunks"]
         assert "system_stat" not in result
+
+    def test_realtime_fetch_failure_feeds_process_trunk_stats_without_crash(self):
+        """
+        Regression: realtime endpoint returns None (fetch exception/timeout).
+        poll_sansay_vsx then never adds realtime_stat to any trunk. Feeding
+        that straight into process_trunk_stats previously raised
+        KeyError('realtime_stat').
+        """
+        args = make_args()
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = [RESOURCE_DATA, None, None]
+            stats = poll_sansay_vsx(args)
+        assert "realtime_stat" not in stats["trunks"]["100"]
+        result = process_trunk_stats(args, stats)
+        assert result["100"]["calculated_stats"]["realtime"]["origination_sessions"] == 0

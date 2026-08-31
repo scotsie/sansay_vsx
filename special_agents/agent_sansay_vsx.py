@@ -386,10 +386,14 @@ def process_trunk_stats(args, stats):
         }
         calculated_stats = default_stats
 
-        # Realtime stat calculations for the trunk
-        origination_sessions = int(data["realtime_stat"].get('numOrig', 0))
-        termination_sessions = int(data["realtime_stat"].get('numTerm', 0))
-        total_limit = int(data["realtime_stat"].get('totalLimit', 0))
+        # Realtime stat calculations for the trunk. The "realtime" report may be
+        # absent for a given poll (fetch failure, timeout, or a device that
+        # returned no matching trunk), so fall back to defaults instead of
+        # assuming the key was populated by poll_sansay_vsx.
+        realtime_stat = data.get("realtime_stat", {})
+        origination_sessions = int(realtime_stat.get('numOrig', 0))
+        termination_sessions = int(realtime_stat.get('numTerm', 0))
+        total_limit = int(realtime_stat.get('totalLimit', 0))
         origination_utilization = termination_utilization = 0
         if total_limit:
             origination_utilization = round((origination_sessions / total_limit) * 100, 1)
@@ -401,17 +405,18 @@ def process_trunk_stats(args, stats):
             'termination_sessions': termination_sessions,
             'termination_utilization': termination_utilization,
         }
-        stats["trunks"][trunk].pop("realtime_stat")
+        stats["trunks"][trunk].pop("realtime_stat", None)
 
         # Ingress and Egress calculations for the trunk
         _direction_name_map = {"ingress_stat": "ingress", "gw_egress_stat": "egress"}
         for direction in ["ingress_stat", "gw_egress_stat"]:
             normalized = _direction_name_map[direction]
-            PDDms = float(data[direction].get('1h_pdd_ms', 0))
-            CA = float(data[direction].get('1h_call_attempt', 0))
-            CD = float(data[direction].get('1h_call_durationSec', 0))
-            FC = float(data[direction].get('1h_call_fail', 0))
-            CAns = float(data[direction].get('1h_call_answer', 0))
+            direction_stat = data.get(direction, {})
+            PDDms = float(direction_stat.get('1h_pdd_ms', 0))
+            CA = float(direction_stat.get('1h_call_attempt', 0))
+            CD = float(direction_stat.get('1h_call_durationSec', 0))
+            FC = float(direction_stat.get('1h_call_fail', 0))
+            CAns = float(direction_stat.get('1h_call_answer', 0))
 
             if CA > 0:
                 calculated_stats[normalized] = {
@@ -420,7 +425,7 @@ def process_trunk_stats(args, stats):
                     'failed_call_ratio': round((FC / CA) * 100, 1),
                     'answer_seize_ratio': round((CAns / CA) * 100, 1),
                 }
-            stats["trunks"][trunk].pop(direction)
+            stats["trunks"][trunk].pop(direction, None)
 
         stats["trunks"][trunk]["calculated_stats"] = calculated_stats
     return stats["trunks"]
