@@ -49,7 +49,10 @@ agent_section_sansay_vsx_cpu = AgentSection(
 def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
     # print(f"discover media {section=}\n{type(section)}")
     for media_server in section:
-        yield Service(item=f"{media_server["alias"]}")
+        alias = media_server.get("alias")
+        if not alias:
+            continue
+        yield Service(item=alias)
 
 
 def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
@@ -61,7 +64,7 @@ def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
         yield Result(state=State.UNKNOWN, summary=f"No media entry found for item '{item}'")
         return
     if len(media) > 1:
-        indices = [e["mediaSrvIndex"] for e in media]
+        indices = [e.get("mediaSrvIndex", "?") for e in media]
         yield Result(
             state=State.UNKNOWN,
             summary=f"Multiple media entries matched '{item}'",
@@ -69,20 +72,23 @@ def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
         )
         return
     media = media[0]
+    alias = media.get("alias", item)
+    public_ip = media.get("publicIP", "unknown")
+    status = media.get("status", "unknown")
+    num_active = media.get("numActiveSessions", 0)
+    max_connections = media.get("maxConnections", 0)
 
     yield Result(
         state=State.OK,
-        summary=f"{media['alias']} ({media['publicIP']})",
-        details=f"{media['alias']} is showing status as {media['status']} with {media['numActiveSessions']} active sessions.",
+        summary=f"{alias} ({public_ip})",
+        details=f"{alias} is showing status as {status} with {num_active} active sessions.",
     )
-    if media["status"] != "up":
+    if status != "up":
         yield Result(
             state=State.CRIT,
-            summary=f"{media['alias']} ({media['publicIP']}) is not in an up state.",
+            summary=f"{alias} ({public_ip}) is not in an up state.",
         )
 
-    max_connections = media["maxConnections"]
-    num_active = media["numActiveSessions"]
     yield Metric(name="num_active_sessions", value=num_active, boundaries=(0, max_connections))
 
     if max_connections > 0:

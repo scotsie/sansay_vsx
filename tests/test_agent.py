@@ -182,6 +182,60 @@ class TestProcessResourceData:
         result = process_resource_data(make_args(), malformed)
         assert result == {}
 
+    def test_skips_row_with_no_field_data(self):
+        """Regression: a resource row with no 'field' key must not crash the whole fetch."""
+        malformed = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {
+                            "name": "ingress_stat",
+                            "row": [{}, _trunk_row("200", "Good Trunk", 5)],
+                        },
+                    ]
+                }
+            }
+        }
+        result = process_resource_data(make_args(), malformed)
+        assert "200" in result
+
+    def test_skips_row_missing_required_keys(self):
+        """Regression: a resource row missing id/trunk_id/alias must not crash the whole fetch."""
+        incomplete_row = {"field": [_field("1h_call_attempt", "5")]}
+        malformed = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {
+                            "name": "ingress_stat",
+                            "row": [incomplete_row, _trunk_row("200", "Good Trunk", 5)],
+                        },
+                    ]
+                }
+            }
+        }
+        result = process_resource_data(make_args(), malformed)
+        assert "200" in result
+
+    def test_skips_table_with_no_name(self):
+        """Regression: a resource table entry with no 'name' key must not crash the whole fetch."""
+        malformed = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {"row": [_trunk_row("999", "No Name Table", 9)]},
+                        {
+                            "name": "ingress_stat",
+                            "row": [_trunk_row("200", "Good Trunk", 5)],
+                        },
+                    ]
+                }
+            }
+        }
+        result = process_resource_data(make_args(), malformed)
+        assert "200" in result
+        assert "999" not in result
+
 
 # ---------------------------------------------------------------------------
 # process_realtime_data
@@ -243,6 +297,93 @@ class TestProcessRealtimeData:
         }
         system_stat, trunk_data = process_realtime_data(make_args(), data)
         assert trunk_data == {}
+
+    def test_skips_system_stat_with_no_row(self):
+        """Regression: system_stat table with no 'row' key must not crash realtime processing."""
+        data = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {"name": "system_stat"},
+                        {
+                            "name": "XBResourceRealTimeStatList",
+                            "row": [],
+                        },
+                    ]
+                }
+            }
+        }
+        system_stat, trunk_data = process_realtime_data(make_args(), data)
+        assert system_stat == {}
+        assert trunk_data == {}
+
+    def test_skips_system_stat_row_with_no_field(self):
+        """Regression: system_stat 'row' present but with no 'field' key must not crash."""
+        data = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {"name": "system_stat", "row": {}},
+                    ]
+                }
+            }
+        }
+        system_stat, _ = process_realtime_data(make_args(), data)
+        assert system_stat == {}
+
+    def test_skips_realtime_row_with_no_field(self):
+        """Regression: an XBResourceRealTimeStatList row with no 'field' key must not crash."""
+        data = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {
+                            "name": "XBResourceRealTimeStatList",
+                            "row": [{}],
+                        },
+                    ]
+                }
+            }
+        }
+        _, trunk_data = process_realtime_data(make_args(), data)
+        assert trunk_data == {}
+
+    def test_skips_realtime_row_with_no_trunk_id(self):
+        """Regression: a realtime row missing 'trunkId' must not crash processing."""
+        data = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {
+                            "name": "XBResourceRealTimeStatList",
+                            "row": [
+                                {"field": [_field("fqdn", "carrier.example.com"), _field("numOrig", "3")]},
+                            ],
+                        },
+                    ]
+                }
+            }
+        }
+        _, trunk_data = process_realtime_data(make_args(), data)
+        assert trunk_data == {}
+
+    def test_skips_table_with_no_name(self):
+        """Regression: a realtime table entry with no 'name' key must not crash processing."""
+        data = {
+            "mysqldump": {
+                "database": {
+                    "table": [
+                        {"row": []},
+                        {
+                            "name": "system_stat",
+                            "row": {"field": [_field("cpu_idle_percent", 50)]},
+                        },
+                    ]
+                }
+            }
+        }
+        system_stat, _ = process_realtime_data(make_args(), data)
+        assert system_stat["system_stat"]["cpu_idle_percent"] == 50
 
 
 # ---------------------------------------------------------------------------

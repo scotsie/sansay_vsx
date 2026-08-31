@@ -214,17 +214,28 @@ def process_resource_data(args, data):
         if not isinstance(table, dict):
             LOGGER.warning("Skipping non-dict resource table entry: %s", table)
             continue
+        table_name = table.get("name")
+        if table_name is None:
+            LOGGER.warning("Skipping resource table entry with no name: %s", table)
+            continue
         if args.debug:
             print(f"Processing entries in {table}.")
 
         rows = table.get("row")
         if not rows:
-            print(f"[{device}] -> Skipping table '{table.get('name', '?')}' with no row data.")
+            print(f"[{device}] -> Skipping table '{table_name}' with no row data.")
             continue
         for row in rows:
             # Convert the list dictionaries with name and content values into
             # a single dictionary with the name as key and content as value.
-            row_dict = {field["name"]: field["content"] for field in row["field"]}
+            fields = row.get("field")
+            if not fields:
+                LOGGER.warning("Skipping resource row with no field data: %s", row)
+                continue
+            row_dict = {field["name"]: field["content"] for field in fields}
+            if "id" not in row_dict or "trunk_id" not in row_dict or "alias" not in row_dict:
+                LOGGER.warning("Skipping resource row missing id/trunk_id/alias: %s", row_dict)
+                continue
             recid = row_dict.pop("id")
             trunk_id = row_dict.pop("trunk_id")
             alias = row_dict.pop("alias")
@@ -243,12 +254,12 @@ def process_resource_data(args, data):
                     print(f"[{device}] -> Created entry for {trunks[trunk_id]} with alias {trunks[trunk_id]['alias']}.")
 
             # If table name isn't in dictionary keys, add it to separate ingress and egress stats.
-            if table["name"] not in trunks[trunk_id].keys():
+            if table_name not in trunks[trunk_id].keys():
                 if args.debug:
                     print(f"[{device}] -> {table} not found in stats trunks table.")
-                trunks[trunk_id][table["name"]] = row_dict
+                trunks[trunk_id][table_name] = row_dict
                 if args.debug:
-                    print(f"[{device}] -> Created key for {table['name']} and value of metrics: {row_dict}.")
+                    print(f"[{device}] -> Created key for {table_name} and value of metrics: {row_dict}.")
 
     if args.debug:
         print(f"resource {trunks=}")
@@ -289,12 +300,20 @@ def process_realtime_data(args, data):
         if not isinstance(table, dict):
             LOGGER.warning("Skipping non-dict table entry: %s", table)
             continue
+        table_name = table.get("name")
+        if table_name is None:
+            LOGGER.warning("Skipping realtime table entry with no name: %s", table)
+            continue
         table_count += 1
-        table_name = table["name"]
         if args.debug:
             print(f"[{device}] -> processing table #{table_count} '{table_name}' stats from json response data.")
         if table_name == "system_stat":
-            row_dict = {field["name"]: field["content"] for field in table["row"]["field"]}
+            row = table.get("row")
+            fields = row.get("field") if isinstance(row, dict) else None
+            if not fields:
+                LOGGER.warning("Skipping system_stat table with no row/field data: %s", table)
+                continue
+            row_dict = {field["name"]: field["content"] for field in fields}
             system_stat[table_name] = row_dict
         elif table_name == "XBResourceRealTimeStatList":
             # Fetch the row value and if it's not present, return an empty list.
@@ -302,12 +321,19 @@ def process_realtime_data(args, data):
             rows = table.get("row", None)
             if rows:
                 for row in rows:
-                    realtime_row_dict = {fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]}
+                    fields = row.get("field")
+                    if not fields:
+                        LOGGER.warning("Skipping realtime row with no field data: %s", row)
+                        continue
+                    realtime_row_dict = {fieldrow["name"]: fieldrow["content"] for fieldrow in fields}
                     # Ignore realtime trunk data that has the FQDN noted as a group
-                    if realtime_row_dict["fqdn"] != "Group":
-                        trunk_realtime_data[realtime_row_dict["trunkId"]] = {
-                            fieldrow["name"]: fieldrow["content"] for fieldrow in row["field"]
-                        }
+                    if realtime_row_dict.get("fqdn") == "Group":
+                        continue
+                    trunk_id = realtime_row_dict.get("trunkId")
+                    if trunk_id is None:
+                        LOGGER.warning("Skipping realtime row with no trunkId: %s", realtime_row_dict)
+                        continue
+                    trunk_realtime_data[trunk_id] = realtime_row_dict
     return system_stat, trunk_realtime_data
 
 

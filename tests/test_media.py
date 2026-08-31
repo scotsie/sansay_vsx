@@ -77,6 +77,17 @@ class TestDiscoverySansayVsxMedia:
     def test_empty_section_yields_no_services(self):
         assert list(discovery_sansay_vsx_media([])) == []
 
+    def test_skips_entries_with_no_alias(self):
+        """Regression: a media entry missing 'alias' (raw vendor passthrough,
+        unlike trunks) must not crash discovery."""
+        section = [
+            {"mediaSrvIndex": 99, "status": "up"},  # no alias key
+            SECTION[0],
+        ]
+        services = list(discovery_sansay_vsx_media(section))
+        assert len(services) == 1
+        assert services[0].item == "Internal Media Switching"
+
 
 # ---------------------------------------------------------------------------
 # Check — edge cases
@@ -158,6 +169,64 @@ class TestCheckMediaDown:
         ))
         crit_result = next(r for r in results if isinstance(r, Result) and r.state == State.CRIT)
         assert "not" in crit_result.summary.lower() or "up" in crit_result.summary.lower()
+
+
+# ---------------------------------------------------------------------------
+# Check — missing fields (raw vendor passthrough, not all fields guaranteed)
+# ---------------------------------------------------------------------------
+
+class TestCheckMissingFields:
+    def _section_missing(self, *keys):
+        entry = {**SECTION[0]}
+        for key in keys:
+            entry.pop(key, None)
+        return [entry]
+
+    def test_missing_public_ip_does_not_crash(self):
+        section = self._section_missing("publicIP")
+        results = list(check_sansay_vsx_media(
+            item="Internal Media Switching", params=DEFAULT_PARAMS, section=section
+        ))
+        assert any(isinstance(r, Result) and r.state == State.OK for r in results)
+
+    def test_missing_status_does_not_crash_and_is_treated_as_down(self):
+        """
+        Regression: a matched entry missing 'status' must not crash. Treating
+        it as not 'up' (rather than assuming healthy) is the safe default.
+        """
+        section = self._section_missing("status")
+        results = list(check_sansay_vsx_media(
+            item="Internal Media Switching", params=DEFAULT_PARAMS, section=section
+        ))
+        crit_results = [r for r in results if isinstance(r, Result) and r.state == State.CRIT]
+        assert crit_results
+
+    def test_missing_num_active_sessions_defaults_to_zero(self):
+        section = self._section_missing("numActiveSessions")
+        results = list(check_sansay_vsx_media(
+            item="Internal Media Switching", params=DEFAULT_PARAMS, section=section
+        ))
+        metrics = {r.name: r.value for r in results if isinstance(r, Metric)}
+        assert metrics["num_active_sessions"] == 0
+
+    def test_missing_max_connections_does_not_crash(self):
+        section = self._section_missing("maxConnections")
+        results = list(check_sansay_vsx_media(
+            item="Internal Media Switching", params=DEFAULT_PARAMS, section=section
+        ))
+        assert any(isinstance(r, Result) for r in results)
+
+    def test_multiple_match_missing_media_srv_index_does_not_crash(self):
+        """Regression: the 'multiple matches' error detail indexes mediaSrvIndex
+        on every match, which isn't guaranteed to be present."""
+        dup_section = [
+            {**SECTION[0], "mediaSrvIndex": 1},
+            self._section_missing("mediaSrvIndex")[0],
+        ]
+        results = list(check_sansay_vsx_media(
+            item="Internal Media Switching", params=DEFAULT_PARAMS, section=dup_section
+        ))
+        assert results[0].state == State.UNKNOWN
 
 
 # ---------------------------------------------------------------------------

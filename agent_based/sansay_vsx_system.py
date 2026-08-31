@@ -156,17 +156,21 @@ def check_sansay_vsx_system(params, section: Section) -> CheckResult:
     yield from _check_ha_state(section)
 
     # --- CPU utilization ---
-    cpu_utilization = 100.0 - section["cpu_idle_percent"]
-    cpu_state = _check_levels(cpu_utilization, params["cpu_levels"])
-    yield Result(state=State(cpu_state), summary=f"CPU at {cpu_utilization}%.")
-    yield Metric(name="cpu_utilization", value=cpu_utilization, boundaries=(0, 100))
+    cpu_idle_percent = section.get("cpu_idle_percent")
+    if cpu_idle_percent is not None:
+        cpu_utilization = 100.0 - cpu_idle_percent
+        cpu_state = _check_levels(cpu_utilization, params["cpu_levels"])
+        yield Result(state=State(cpu_state), summary=f"CPU at {cpu_utilization}%.")
+        yield Metric(name="cpu_utilization", value=cpu_utilization, boundaries=(0, 100))
 
     # --- Session utilization ---
-    if not (section["max_session_allowed"] and section["sum_active_session"] is not None):
+    max_session_allowed = section.get("max_session_allowed")
+    sum_active_session = section.get("sum_active_session")
+    if not (max_session_allowed and sum_active_session is not None):
         return
 
     session_utilization = round(
-        (section["sum_active_session"] / section["max_session_allowed"]) * 100, 1
+        (sum_active_session / max_session_allowed) * 100, 1
     )
     yield Metric(name="session_utilization", value=session_utilization, boundaries=(0, 100))
 

@@ -155,6 +155,45 @@ class TestCheckSessionUtilization:
 
 
 # ---------------------------------------------------------------------------
+# Check — missing fields (degraded/partial system_stat response)
+# ---------------------------------------------------------------------------
+
+class TestCheckMissingFields:
+    def test_missing_cpu_idle_percent_does_not_crash(self):
+        """
+        Regression: discovery only requires cpu_idle_percent at discovery time.
+        A later poll with a degraded system_stat response that omits it must
+        not crash the check.
+        """
+        section = {k: v for k, v in SECTION_NORMAL.items() if k != "cpu_idle_percent"}
+        results = _check(section)
+        cpu_results = [r for r in results if isinstance(r, Result) and "CPU" in r.summary]
+        assert cpu_results == []
+
+    def test_missing_cpu_idle_percent_still_runs_ha_and_session(self):
+        section = {k: v for k, v in SECTION_NORMAL.items() if k != "cpu_idle_percent"}
+        results = _check(section)
+        ha_results = [r for r in results if isinstance(r, Result) and "HA:" in r.summary]
+        session_results = [r for r in results if isinstance(r, Result) and "Session" in r.summary]
+        assert len(ha_results) == 1
+        assert len(session_results) == 1
+
+    def test_missing_max_session_allowed_does_not_crash(self):
+        """Regression: a system_stat response missing max_session_allowed must not crash."""
+        section = {k: v for k, v in SECTION_NORMAL.items() if k != "max_session_allowed"}
+        results = _check(section)
+        session_results = [r for r in results if isinstance(r, Result) and "Session" in r.summary]
+        assert session_results == []
+
+    def test_missing_sum_active_session_does_not_crash(self):
+        """Regression: a system_stat response missing sum_active_session must not crash."""
+        section = {k: v for k, v in SECTION_NORMAL.items() if k != "sum_active_session"}
+        results = _check(section)
+        session_results = [r for r in results if isinstance(r, Result) and "Session" in r.summary]
+        assert session_results == []
+
+
+# ---------------------------------------------------------------------------
 # Check — session drop detection
 # ---------------------------------------------------------------------------
 
