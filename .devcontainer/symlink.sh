@@ -23,8 +23,14 @@ PLUGIN_DIR=$OMD_ROOT/local/lib/python3/cmk_addons/plugins/$PKGNAME
 
 rm -rf $PLUGIN_DIR
 mkdir -p $PLUGIN_DIR
-for DIR in 'agent_based' 'bakery' 'checkman' 'graphing' 'inventory_ui' 'libexec' 'rulesets' 'server_side_calls'; do
+for DIR in 'agent_based' 'bakery' 'checkman' 'graphing' 'inventory_ui' 'libexec' 'rulesets' 'server_side_calls' 'special_agents'; do
     link_tree "$WORKSPACE/$DIR" "$PLUGIN_DIR/$DIR"
+done
+
+# Top-level modules shipped in the package root (lib.py) are files, not
+# directories, so link_tree doesn't cover them.
+for FILE in "$WORKSPACE"/*.py; do
+    [ -f "$FILE" ] && ln -sfv "$FILE" "$PLUGIN_DIR/$(basename "$FILE")"
 done
 
 link_tree "$WORKSPACE/nagios_plugins" "$OMD_ROOT/local/lib/nagios/plugins"

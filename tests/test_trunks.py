@@ -265,3 +265,27 @@ class TestClusterCheckSansayVsxTrunks:
             item="100 Carrier In", params=DEFAULT_PARAMS, section=section,
         ))
         assert any(isinstance(r, Result) and r.state != State.UNKNOWN for r in results)
+
+
+class TestCheckAgentError:
+    ERROR_SECTION = {"_agent_error": "no trunk data: ConnectTimeout after 3 attempt(s)"}
+
+    def test_unknown_instead_of_silent_no_traffic(self):
+        """
+        An unavailable resource report must not be reported as an idle trunk:
+        that hides the outage and graphs a false drop to zero.
+        """
+        results = list(
+            check_sansay_vsx_trunks(
+                item="100 Carrier In", params=DEFAULT_PARAMS, section=self.ERROR_SECTION
+            )
+        )
+        assert len(results) == 1
+        assert results[0].state == State.UNKNOWN
+        assert "ConnectTimeout" in results[0].summary
+
+    def test_no_discovery_on_agent_error(self):
+        assert list(discovery_sansay_vsx_trunks(self.ERROR_SECTION)) == []
+
+    def test_empty_section_discovers_nothing(self):
+        assert list(discovery_sansay_vsx_trunks({})) == []

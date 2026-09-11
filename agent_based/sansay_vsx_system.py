@@ -18,7 +18,7 @@ from cmk.agent_based.v2 import (
     State,
 )
 
-from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
+from cmk_addons.plugins.sansay_vsx.lib import agent_error, parse_sansay_vsx
 
 
 Section = Mapping[str, object]
@@ -139,13 +139,21 @@ def _rolling_average(
 
 
 def discovery_sansay_vsx_system(section: Section) -> DiscoveryResult:
-    if "cpu_idle_percent" in section.keys():
+    if section and "cpu_idle_percent" in section.keys():
         yield Service()
     else:
         return
 
 
 def check_sansay_vsx_system(params, section: Section) -> CheckResult:
+    # The agent reports why the realtime report yielded no system data (timeout,
+    # HTTP status, malformed body). Surface it: a transient poll failure used to
+    # be indistinguishable from the device being unreachable.
+    error = agent_error(section)
+    if error:
+        yield Result(state=State.UNKNOWN, summary=f"No data from agent - {error}")
+        return
+
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return

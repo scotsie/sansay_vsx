@@ -4,7 +4,7 @@
 import json
 import pytest
 
-from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
+from cmk_addons.plugins.sansay_vsx.lib import agent_error, parse_sansay_vsx
 
 
 def test_parse_valid_dict():
@@ -37,3 +37,27 @@ def test_parse_preserves_numeric_types():
     result = parse_sansay_vsx(string_table)
     assert result["cpu_idle_percent"] == 98
     assert result["float_val"] == pytest.approx(3.14)
+
+
+def test_parse_json_null_section():
+    """
+    Older agent versions wrote None for an unavailable report, which serializes
+    to 'null'. json.loads succeeds and returns None, so the check plug-in was
+    handed a non-container section.
+    """
+    assert parse_sansay_vsx([["null"]]) == {}
+
+
+def test_agent_error_from_dict_section():
+    assert agent_error({"_agent_error": "no system data: HTTP 503"}) == "no system data: HTTP 503"
+
+
+def test_agent_error_from_list_section():
+    assert agent_error([{"_agent_error": "no media data"}]) == "no media data"
+
+
+def test_agent_error_none_for_healthy_sections():
+    assert agent_error({"cpu_idle_percent": 98}) is None
+    assert agent_error([{"alias": "Internal"}]) is None
+    assert agent_error({}) is None
+    assert agent_error(None) is None

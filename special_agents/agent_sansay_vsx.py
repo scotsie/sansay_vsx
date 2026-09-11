@@ -9,6 +9,7 @@ Resource = state/resource
 
 import logging
 import re
+import time
 from collections.abc import Sequence
 
 import requests
@@ -21,6 +22,18 @@ from pathlib import Path
 
 
 LOGGER = logging.getLogger("agent_sansay_vsx")
+
+# Key used to carry a per-report failure reason from the agent into the section
+# payload, so the check plug-in can report *why* data is missing instead of the
+# generic "No data from agent".
+AGENT_ERROR_KEY = "_agent_error"
+
+# Key under which poll_sansay_vsx collects per-report failure reasons.
+ERRORS_KEY = "_errors"
+
+# HTTP statuses worth another attempt: transient server-side or rate limiting.
+# Anything else (401/403/404) will not improve by retrying.
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 def parse_arguments(argv: Sequence[str] | None) -> Args:
@@ -94,7 +107,30 @@ def parse_arguments(argv: Sequence[str] | None) -> Args:
     return parser.parse_args(argv)
 
 
-def fetch_sansay_json(args, report_name):
+def _int_arg(args, name, default):
+    """Read an int argument defensively (argparse may not have supplied it)."""
+    try:
+        return int(getattr(args, name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _record_error(errors, report_name, message):
+    """Store a report failure reason for later inclusion in the section data."""
+    if errors is not None:
+        errors[report_name] = message
+
+
+def fetch_sansay_json(args, report_name, errors=None):
+    """
+    Fetch one Sansay report, retrying transient failures up to --retries times.
+
+    Returns the decoded JSON, or None on failure. Failures are logged to stderr
+    and, when an `errors` dict is supplied, recorded under `report_name` so the
+    reason can be surfaced in the affected section instead of being lost.
+    Diagnostics must never be printed to stdout: these calls happen while a
+    section header is already open, and any stray line corrupts the payload.
+    """
     if args.debug:
         print(f"{args=}")
     device = args.host
@@ -106,7 +142,9 @@ def fetch_sansay_json(args, report_name):
                 try:
                     password = password_store.lookup(pw_file=Path(path), pw_id=uuid)
                 except ValueError as e:
-                    print(f"[{device}] -> ERROR: password store lookup failed: {e}")
+                    message = f"{report_name} report unavailable: password store lookup failed: {e}"
+                    LOGGER.error("[%s] -> %s", device, message)
+                    _record_error(errors, report_name, message)
                     return None
             case str() if re.match(r'^[a-zA-Z0-9]+$', args.password):
                 password = args.password
@@ -117,10 +155,10 @@ def fetch_sansay_json(args, report_name):
     protocol = args.proto
     port = args.port
     ssl_verify = args.verify_ssl
-    timeout = args.timeout
+    timeout = _int_arg(args, "timeout", 3)
+    attempts = max(1, _int_arg(args, "retries", 2) + 1)
     # TODO for later implementation
     # sections = [args.sections.split(",")]
-    # retries = args.retries
 
     if args.debug:
         print(f"[{device}] -> fetching Sansay VSX {report_name} stats")
@@ -134,28 +172,71 @@ def fetch_sansay_json(args, report_name):
         print(f"[{device}] -> WARN: hostname/certificate verification disabled via {args.verify_ssl} parameter.")
 
     if not username or not password:
-        print(f"[{device}] -> ERROR: unable to fetch Sansay report, VSX username/password parameter missing")
+        message = f"{report_name} report unavailable: VSX username/password parameter missing"
+        LOGGER.error("[%s] -> %s", device, message)
+        _record_error(errors, report_name, message)
         return None
 
-    try:
-        response = requests.get(
-            url,
-            auth=HTTPBasicAuth(username, password),
-            params=params,
-            verify=ssl_verify,
-            timeout=timeout,
+    last_error = "unknown error"
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.get(
+                url,
+                auth=HTTPBasicAuth(username, password),
+                params=params,
+                verify=ssl_verify,
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            last_error = f"{type(e).__name__}: {e}"
+        else:
+            if args.debug:
+                print(f"[{device}] -> {report_name} HTTP {response.status_code}: {len(response.content)} bytes")
+                print(f"[{device}] -> {report_name} raw response:\n{response.text}")
+
+            if response.status_code == 200:
+                try:
+                    return response.json()
+                except ValueError as e:
+                    # A 200 carrying a truncated or non-JSON body (device under
+                    # load, proxy error page). Keep a snippet: it is the only
+                    # evidence left once the next poll overwrites the output.
+                    last_error = (
+                        f"invalid JSON in response ({e}); "
+                        f"first 200 bytes: {response.text[:200]!r}"
+                    )
+            else:
+                last_error = f"HTTP {response.status_code} {response.reason}"
+                if response.status_code not in _RETRYABLE_STATUS:
+                    break
+
+        LOGGER.warning(
+            "[%s] -> '%s' report attempt %d/%d failed: %s",
+            device, report_name, attempt, attempts, last_error,
         )
-        if args.debug:
-            print(f"[{device}] -> {report_name} HTTP {response.status_code}: {len(response.content)} bytes")
-            print(f"[{device}] -> {report_name} raw response:\n{response.text}")
+        if attempt < attempts:
+            time.sleep(min(2.0, 0.5 * attempt))
 
-        if response.status_code != 200:
-            print(f"[{device}] -> ERROR: unable to fetch Sansay '{report_name}' report: {response.status_code} {response.reason}")
-            return None
-        return response.json()
-    except requests.RequestException as e:
-        print(f"[{device}] -> ERROR: unable to fetch Sansay '{report_name}' report: {e}")
-        return None
+    message = (
+        f"{report_name} report unavailable after {attempt} attempt(s) "
+        f"(timeout {timeout}s): {last_error}"
+    )
+    LOGGER.error("[%s] -> %s", device, message)
+    _record_error(errors, report_name, message)
+    return None
+
+
+def _observed_table_names(data):
+    """Table names present in a report response, for diagnosing partial data."""
+    db = data.get("mysqldump", {}).get("database", {}) if isinstance(data, dict) else {}
+    tables = db.get("table")
+    if not isinstance(tables, list):
+        tables = db.get("table_data")
+    if isinstance(tables, dict):
+        tables = [tables]
+    if not isinstance(tables, list):
+        return []
+    return [t.get("name") for t in tables if isinstance(t, dict)]
 
 
 def poll_sansay_vsx(args):
@@ -164,28 +245,50 @@ def poll_sansay_vsx(args):
       - resource - all trunks with their ingress and egress data
       - realtime - overall VSX stats plus active trunks realtime data
       - media_server - media server statistics
+
+    Any report that could not be fetched or did not carry the expected data
+    records a reason under stats[ERRORS_KEY]; the section writers turn that
+    into an explicit check result rather than an empty section.
     """
 
     device = args.host
-    stats = {}
+    errors = {}
+    stats = {ERRORS_KEY: errors}
 
-    resource_data = fetch_sansay_json(args, "resource")
+    resource_data = fetch_sansay_json(args, "resource", errors)
     if resource_data is not None:
-        stats["trunks"] = process_resource_data(args, resource_data)
+        trunks = process_resource_data(args, resource_data)
+        if trunks is None:
+            _record_error(errors, "resource", "resource report structure not recognized")
+        else:
+            stats["trunks"] = trunks
 
-    realtime_data = fetch_sansay_json(args, "realtime")
+    realtime_data = fetch_sansay_json(args, "realtime", errors)
     if realtime_data is not None:
         realtime_system_data, realtime_trunk_data = process_realtime_data(args, realtime_data)
         if "system_stat" in realtime_system_data:
             stats["system_stat"] = realtime_system_data["system_stat"]
         else:
-            print(f"[{device}] -> No system_stat found in realtime response data.")
+            message = (
+                "realtime report carried no usable system_stat row "
+                f"(tables in response: {_observed_table_names(realtime_data) or 'none'})"
+            )
+            LOGGER.error("[%s] -> %s", device, message)
+            _record_error(errors, "realtime", message)
         if "trunks" in stats:
             stats["trunks"].update(process_realtime_trunk_data(stats["trunks"], realtime_trunk_data))
 
-    media_data = fetch_sansay_json(args, "media_server")
+    media_data = fetch_sansay_json(args, "media_server", errors)
     if media_data is not None:
-        stats["media_stats"] = process_media_data(args, media_data)
+        media_stats = process_media_data(args, media_data)
+        if media_stats is None:
+            _record_error(
+                errors,
+                "media_server",
+                "media_server report carried no XBMediaServerRealTimeStat data",
+            )
+        else:
+            stats["media_stats"] = media_stats
 
     return stats
 
@@ -193,7 +296,7 @@ def poll_sansay_vsx(args):
 def process_resource_data(args, data):
     device = args.host
     if data is None:
-        print(f"[{device}] -> unable to parse table from json response data.\n{data}")
+        LOGGER.error("[%s] -> unable to parse resource table from json response data: %s", device, data)
         return
 
     trunks = {}
@@ -208,7 +311,10 @@ def process_resource_data(args, data):
     if not isinstance(tables, list):
         tables = db.get("table_data")
     if not tables:
-        print(f"[{device}] -> unable to parse resource 'table'/'table_data' key from json response data.\n{data}")
+        LOGGER.error(
+            "[%s] -> unable to parse resource 'table'/'table_data' key from json response data: %s",
+            device, data,
+        )
         return trunks
     for table in tables:
         if not isinstance(table, dict):
@@ -223,7 +329,7 @@ def process_resource_data(args, data):
 
         rows = table.get("row")
         if not rows:
-            print(f"[{device}] -> Skipping table '{table_name}' with no row data.")
+            LOGGER.warning("[%s] -> Skipping table '%s' with no row data.", device, table_name)
             continue
         for row in rows:
             # Convert the list dictionaries with name and content values into
@@ -269,7 +375,7 @@ def process_resource_data(args, data):
 def process_realtime_data(args, data):
     device = args.host
     if data is None:
-        print(f"[{device}] -> unable to parse table from json response data.\n{data}")
+        LOGGER.error("[%s] -> unable to parse realtime table from json response data: %s", device, data)
         return
 
     # Two API response formats have been observed across device generations:
@@ -291,7 +397,10 @@ def process_realtime_data(args, data):
     if not isinstance(tables, list):
         tables = db.get("table_data")
     if not tables:
-        print(f"[{device}] -> unable to parse realtime 'table'/'table_data' key from json response data.\n{data}")
+        LOGGER.error(
+            "[%s] -> unable to parse realtime 'table'/'table_data' key from json response data: %s",
+            device, data,
+        )
         return {}, {}
     table_count = 0
     system_stat = {}
@@ -361,33 +470,46 @@ def process_realtime_trunk_data(trunks, realtime_data):
 def process_media_data(args, media_data):
     device = args.host
     if media_data is None:
-        print(f"[{device}] -> unable to parse XBMediaServerRealTimeStat from jsondata: {media_data}")
+        LOGGER.error("[%s] -> unable to parse XBMediaServerRealTimeStat from jsondata: %s", device, media_data)
         return
     stat_list = media_data.get("XBMediaServerRealTimeStatList")
     if not isinstance(stat_list, dict):
-        print(f"[{device}] -> unexpected media server response structure "
-              f"(XBMediaServerRealTimeStatList={stat_list!r}): {media_data}")
+        LOGGER.error(
+            "[%s] -> unexpected media server response structure "
+            "(XBMediaServerRealTimeStatList=%r): %s", device, stat_list, media_data,
+        )
         return None
     media_servers = stat_list.get("XBMediaServerRealTimeStat")
     if media_servers is None:
-        print(f"[{device}] -> unable to parse 'XBMediaServerRealTimeStat' key from jsondata: {media_data}")
+        LOGGER.error("[%s] -> unable to parse 'XBMediaServerRealTimeStat' key from jsondata: %s", device, media_data)
         return None
     return media_servers
 
 
+def _section_error(args, stats, report_name):
+    """
+    Build the payload for a section whose source report is unavailable.
+
+    The reason recorded by poll_sansay_vsx names the actual failure (timeout,
+    HTTP status, malformed body) instead of leaving the check plug-in to report
+    a bare "No data from agent".
+    """
+    reason = stats.get(ERRORS_KEY, {}).get(report_name) if isinstance(stats, dict) else None
+    message = reason or f"{report_name} report returned no data"
+    LOGGER.error("[%s] -> %s", args.host, message)
+    return {AGENT_ERROR_KEY: message}
+
+
 def process_media_stats(args, stats):
-    device = args.host
     if "media_stats" not in stats:
-        print(f"[{device}] -> No media stats found in jsondata: {stats}")
-        return None
+        # Media is a list section; wrap the error so the payload type holds.
+        return [_section_error(args, stats, "media_server")]
     return stats["media_stats"]
 
 
 def process_trunk_stats(args, stats):
-    device = args.host
     if "trunks" not in stats:
-        print(f"[{device}] -> No trunk stats found in jsondata: {stats}")
-        return None
+        return _section_error(args, stats, "resource")
 
     for trunk, data in stats["trunks"].items():
         default_stats = {
@@ -458,10 +580,8 @@ def process_trunk_stats(args, stats):
 
 
 def process_system_stats(args, stats):
-    device = args.host
     if "system_stat" not in stats:
-        print(f"[{device}] -> No media stats found in jsondata: {stats}")
-        return
+        return _section_error(args, stats, "realtime")
     return stats["system_stat"]
 
 

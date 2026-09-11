@@ -317,3 +317,24 @@ class TestCheckHaState:
         results = _check(SECTION_NORMAL)
         cpu_results = [r for r in results if isinstance(r, Result) and "CPU" in r.summary]
         assert len(cpu_results) == 1
+
+
+class TestCheckAgentError:
+    """
+    A failed realtime poll used to reach the check as an unparseable section and
+    was reported as "No data from agent", indistinguishable from an unreachable
+    host. The agent now names the cause.
+    """
+
+    def test_unknown_reports_agent_reason(self):
+        results = _check({"_agent_error": "no system data: ReadTimeout after 3 attempt(s)"})
+        assert len(results) == 1
+        assert results[0].state == State.UNKNOWN
+        assert "ReadTimeout" in results[0].summary
+
+    def test_no_metrics_emitted_on_agent_error(self):
+        results = _check({"_agent_error": "no system data"})
+        assert not [r for r in results if isinstance(r, Metric)]
+
+    def test_no_discovery_on_agent_error(self):
+        assert list(discovery_sansay_vsx_system({"_agent_error": "no system data"})) == []

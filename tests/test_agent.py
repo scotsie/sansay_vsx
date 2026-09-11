@@ -8,13 +8,23 @@ Covers both happy paths and the specific failure modes observed in crash reports
   - Duplicate calculated_stats keys (ingress/ingress_stat, egress/gw_egress_stat)
 """
 
+import argparse
+import json
+
 import pytest
+import requests
 from unittest.mock import MagicMock, patch
 
 from cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx import (
+    AGENT_ERROR_KEY,
+    ERRORS_KEY,
+    agent_sansay_vsx_main,
+    fetch_sansay_json,
+    process_media_stats,
     process_realtime_data,
     process_realtime_trunk_data,
     process_resource_data,
+    process_system_stats,
     process_trunk_stats,
     poll_sansay_vsx,
 )
@@ -524,9 +534,18 @@ class TestProcessTrunkStats:
         # 3/100 * 100 = 3.0%
         assert realtime["origination_utilization"] == pytest.approx(3.0)
 
-    def test_returns_none_when_no_trunks_key(self):
+    def test_returns_error_payload_when_no_trunks_key(self):
+        """
+        A section must never be written as JSON 'null': the check plug-in then
+        reports the generic "No data from agent". Emit the reason instead.
+        """
         result = process_trunk_stats(make_args(), {})
-        assert result is None
+        assert result[AGENT_ERROR_KEY] == "resource report returned no data"
+
+    def test_error_payload_carries_fetch_reason(self):
+        stats = {ERRORS_KEY: {"resource": "HTTP 503 Service Unavailable"}}
+        result = process_trunk_stats(make_args(), stats)
+        assert "HTTP 503 Service Unavailable" in result[AGENT_ERROR_KEY]
 
     def test_missing_realtime_stat_does_not_crash(self):
         """
@@ -594,14 +613,31 @@ class TestPollSansayVsx:
         assert "trunks" in result
         assert "100" in result["trunks"]
 
-    def test_all_endpoints_fail_returns_empty_stats(self):
+    def test_all_endpoints_fail_returns_no_report_data(self):
         args = make_args()
         with patch(
             "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
         ) as mock_fetch:
             mock_fetch.return_value = None
             result = poll_sansay_vsx(args)
-        assert result == {}
+        assert set(result) == {ERRORS_KEY}
+
+    def test_missing_system_stat_records_reason_with_table_names(self):
+        """
+        The realtime report can answer 200 without a usable system_stat row.
+        Record which tables were present — the response is gone by the next poll.
+        """
+        args = make_args()
+        realtime_without_system_stat = {
+            "mysqldump": {"database": {"table": [{"name": "gw_realtime_stat", "row": []}]}}
+        }
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = [RESOURCE_DATA, realtime_without_system_stat, None]
+            result = poll_sansay_vsx(args)
+        assert "system_stat" not in result
+        assert "gw_realtime_stat" in result[ERRORS_KEY]["realtime"]
 
     def test_empty_dict_realtime_does_not_crash(self):
         """
@@ -636,3 +672,179 @@ class TestPollSansayVsx:
         assert "realtime_stat" not in stats["trunks"]["100"]
         result = process_trunk_stats(args, stats)
         assert result["100"]["calculated_stats"]["realtime"]["origination_sessions"] == 0
+
+
+# ---------------------------------------------------------------------------
+# fetch_sansay_json — retries and error reporting
+# ---------------------------------------------------------------------------
+
+def make_fetch_args(**overrides):
+    """Real (non-Mock) argument object: fetch_sansay_json type-matches on password."""
+    args = argparse.Namespace(
+        host="10.0.0.1",
+        user="monitor",
+        password="secret123",
+        proto="https",
+        port=8888,
+        verify_ssl=False,
+        timeout=3,
+        retries=2,
+        debug=False,
+    )
+    for k, v in overrides.items():
+        setattr(args, k, v)
+    return args
+
+
+def _response(status_code=200, json_data=None, text="", reason="OK"):
+    response = MagicMock()
+    response.status_code = status_code
+    response.reason = reason
+    response.text = text
+    response.content = text.encode()
+    if json_data is None:
+        response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+    else:
+        response.json.return_value = json_data
+    return response
+
+
+class TestFetchRetries:
+    def test_transient_timeout_is_retried_and_succeeds(self):
+        """
+        --retries was parsed and passed by the server side call but never used,
+        so a single dropped request blanked the section for a whole poll.
+        """
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = [requests.ReadTimeout("timed out"), _response(json_data={"ok": True})]
+            result = fetch_sansay_json(make_fetch_args(), "realtime", errors)
+        assert result == {"ok": True}
+        assert errors == {}
+
+    def test_error_recorded_after_attempts_exhausted(self):
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = requests.ReadTimeout("timed out")
+            result = fetch_sansay_json(make_fetch_args(retries=2), "realtime", errors)
+        assert result is None
+        assert get.call_count == 3
+        assert "ReadTimeout" in errors["realtime"]
+        assert "3 attempt(s)" in errors["realtime"]
+
+    def test_auth_failure_is_not_retried(self):
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.return_value = _response(status_code=401, reason="Unauthorized")
+            result = fetch_sansay_json(make_fetch_args(), "realtime", errors)
+        assert result is None
+        assert get.call_count == 1
+        assert "HTTP 401 Unauthorized" in errors["realtime"]
+
+    def test_server_error_is_retried(self):
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = [
+                _response(status_code=503, reason="Service Unavailable"),
+                _response(json_data={"ok": True}),
+            ]
+            result = fetch_sansay_json(make_fetch_args(), "realtime", errors)
+        assert result == {"ok": True}
+
+    def test_non_json_body_records_snippet(self):
+        """A 200 with an HTML error page used to crash the agent in response.json()."""
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.return_value = _response(text="<html>502 Proxy Error</html>")
+            result = fetch_sansay_json(make_fetch_args(retries=0), "realtime", errors)
+        assert result is None
+        assert "502 Proxy Error" in errors["realtime"]
+
+
+# ---------------------------------------------------------------------------
+# Agent output — every section must stay parseable
+# ---------------------------------------------------------------------------
+
+class TestAgentOutput:
+    def _sections(self, capsys):
+        """Split captured agent output into {section_name: [lines]}."""
+        sections, current = {}, None
+        for line in capsys.readouterr().out.splitlines():
+            if line.startswith("<<<") and line.endswith(">>>"):
+                current = line.strip("<>").split(":")[0]
+                sections[current] = []
+            elif current is not None:
+                sections[current].append(line)
+        return sections
+
+    def test_realtime_failure_yields_parseable_sections(self, capsys):
+        """
+        Regression: process_system_stats printed a diagnostic to stdout *inside*
+        the already-open section and then wrote 'null'. The parser saw the text
+        line, failed to decode it and the check reported "No data from agent".
+        """
+        args = make_args()
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = lambda a, report, errors=None: (
+                None if report == "realtime" else {"resource": RESOURCE_DATA}.get(report)
+            )
+            agent_sansay_vsx_main(args)
+        sections = self._sections(capsys)
+
+        for name, lines in sections.items():
+            assert len(lines) == 1, f"section {name} carries stray output: {lines}"
+            payload = json.loads(lines[0])
+            assert payload is not None
+
+        system = json.loads(sections["sansay_vsx_system"][0])
+        assert AGENT_ERROR_KEY in system
+
+    def test_healthy_poll_writes_plain_sections(self, capsys):
+        args = make_args()
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = lambda a, report, errors=None: {
+                "resource": RESOURCE_DATA,
+                "realtime": REALTIME_DATA,
+                "media_server": None,
+            }[report]
+            agent_sansay_vsx_main(args)
+        sections = self._sections(capsys)
+        system = json.loads(sections["sansay_vsx_system"][0])
+        assert AGENT_ERROR_KEY not in system
+        assert ERRORS_KEY not in json.loads(sections["sansay_vsx_trunks"][0])
+
+
+class TestProcessSystemStats:
+    def test_reason_from_poll_is_propagated(self):
+        stats = {ERRORS_KEY: {"realtime": "ReadTimeout: HTTPSConnectionPool read timed out"}}
+        result = process_system_stats(make_args(), stats)
+        assert "ReadTimeout" in result[AGENT_ERROR_KEY]
+
+    def test_generic_message_without_recorded_reason(self):
+        result = process_system_stats(make_args(), {})
+        assert result[AGENT_ERROR_KEY] == "realtime report returned no data"
+
+
+class TestPollReportStructureErrors:
+    """A report that answers 200 with an unusable body must not yield a null section."""
+
+    def test_unrecognized_media_structure_records_reason(self):
+        args = make_args()
+        with patch(
+            "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
+        ) as mock_fetch:
+            mock_fetch.side_effect = [RESOURCE_DATA, REALTIME_DATA, {"unexpected": "shape"}]
+            result = poll_sansay_vsx(args)
+        assert "media_stats" not in result
+        assert "XBMediaServerRealTimeStat" in result[ERRORS_KEY]["media_server"]
+        payload = process_media_stats(args, result)
+        assert AGENT_ERROR_KEY in payload[0]

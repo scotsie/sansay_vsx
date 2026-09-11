@@ -322,3 +322,20 @@ class TestClusterCheckSansayVsxMedia:
             item="MST3 HA Pair", params=DEFAULT_PARAMS, section=section,
         ))
         assert any(isinstance(r, Result) and r.state == State.OK for r in results)
+
+
+class TestCheckAgentError:
+    ERROR_SECTION = [{"_agent_error": "no media data: HTTP 503 Service Unavailable"}]
+
+    def test_unknown_reports_agent_reason(self):
+        results = list(
+            check_sansay_vsx_media(
+                item="MST3 HA Pair", params=DEFAULT_PARAMS, section=self.ERROR_SECTION
+            )
+        )
+        assert len(results) == 1
+        assert results[0].state == State.UNKNOWN
+        assert "HTTP 503" in results[0].summary
+
+    def test_no_discovery_on_agent_error(self):
+        assert list(discovery_sansay_vsx_media(self.ERROR_SECTION)) == []

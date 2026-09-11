@@ -18,7 +18,7 @@ from cmk.agent_based.v2 import (
     State,
 )
 
-from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
+from cmk_addons.plugins.sansay_vsx.lib import agent_error, parse_sansay_vsx
 
 
 Section = Mapping[str, Any]
@@ -107,13 +107,24 @@ agent_section_sansay_vsx_cpu = AgentSection(
 
 
 def discovery_sansay_vsx_trunks(section: Section) -> DiscoveryResult:
+    if not section or agent_error(section):
+        return
     for trunk_id, trunk_data in section.items():
+        if "alias" not in trunk_data:
+            continue
         yield Service(item=f"{trunk_id} {trunk_data['alias']}")
 
 
 def check_sansay_vsx_trunks(item, params, section: Section) -> CheckResult:
+    # Without this the trunk would be reported as idle ("no call traffic") while
+    # the resource report was in fact unavailable, hiding the outage.
+    error = agent_error(section)
+    if error:
+        yield Result(state=State.UNKNOWN, summary=f"No data from agent - {error}")
+        return
+
     trunk_id = item.split()[0]
-    if trunk_id not in section:
+    if not section or trunk_id not in section:
         yield Result(state=State.OK, summary=f"Trunk {trunk_id}: no call traffic")
         for direction, metrics in _ZERO_STATS.items():
             for metric, value in metrics.items():

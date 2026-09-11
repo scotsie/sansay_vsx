@@ -18,7 +18,7 @@ from cmk.agent_based.v2 import (
     State,
 )
 
-from cmk_addons.plugins.sansay_vsx.lib import parse_sansay_vsx
+from cmk_addons.plugins.sansay_vsx.lib import agent_error, parse_sansay_vsx
 
 
 Section = list[dict[str, Any]]
@@ -48,6 +48,8 @@ agent_section_sansay_vsx_cpu = AgentSection(
 
 def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
     # print(f"discover media {section=}\n{type(section)}")
+    if agent_error(section):
+        return
     for media_server in section:
         alias = media_server.get("alias")
         if not alias:
@@ -56,6 +58,12 @@ def discovery_sansay_vsx_media(section: Section) -> DiscoveryResult:
 
 
 def check_sansay_vsx_media(item, params, section: Section) -> CheckResult:
+    # Distinguish "the agent could not fetch the media report" from "the device
+    # is unreachable" - both used to collapse into the same generic message.
+    error = agent_error(section)
+    if error:
+        yield Result(state=State.UNKNOWN, summary=f"No data from agent - {error}")
+        return
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data from agent - check agent connectivity")
         return
