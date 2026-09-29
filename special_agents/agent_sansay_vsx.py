@@ -32,8 +32,12 @@ AGENT_ERROR_KEY = "_agent_error"
 ERRORS_KEY = "_errors"
 
 # HTTP statuses worth another attempt: transient server-side or rate limiting.
-# Anything else (401/403/404) will not improve by retrying.
-_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+# 400 is included because clustered VSX pairs are polled twice per cycle (once
+# per node's own check, once by the cluster host's cluster_check_function), and
+# the device intermittently 400s when two Basic-Auth requests land within
+# milliseconds of each other. A short backoff retry clears the race. Anything
+# else (401/403/404) will not improve by retrying.
+_RETRYABLE_STATUS = frozenset({400, 429, 500, 502, 503, 504})
 
 
 def parse_arguments(argv: Sequence[str] | None) -> Args:
