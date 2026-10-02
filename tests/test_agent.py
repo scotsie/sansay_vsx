@@ -860,7 +860,7 @@ class TestAgentOutput:
         with patch(
             "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
         ) as mock_fetch:
-            mock_fetch.side_effect = lambda a, report, errors=None: (
+            mock_fetch.side_effect = lambda a, report, errors=None, is_usable=None: (
                 None if report == "realtime" else {"resource": RESOURCE_DATA}.get(report)
             )
             agent_sansay_vsx_main(args)
@@ -879,7 +879,7 @@ class TestAgentOutput:
         with patch(
             "cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.fetch_sansay_json"
         ) as mock_fetch:
-            mock_fetch.side_effect = lambda a, report, errors=None: {
+            mock_fetch.side_effect = lambda a, report, errors=None, is_usable=None: {
                 "resource": RESOURCE_DATA,
                 "realtime": REALTIME_DATA,
                 "media_server": None,
