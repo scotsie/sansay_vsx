@@ -125,9 +125,18 @@ def _record_error(errors, report_name, message):
         errors[report_name] = message
 
 
-def fetch_sansay_json(args, report_name, errors=None):
+def _has_report_tables(data):
+    """True when a report response carries at least one table."""
+    return bool(_observed_table_names(data))
+
+
+def fetch_sansay_json(args, report_name, errors=None, is_usable=None):
     """
     Fetch one Sansay report, retrying transient failures up to --retries times.
+
+    A 200 whose JSON fails the optional `is_usable(data)` check is retried like
+    any other transient failure: the device sometimes answers a racing request
+    with a well-formed but empty body.
 
     Returns the decoded JSON, or None on failure. Failures are logged to stderr
     and, when an `errors` dict is supplied, recorded under `report_name` so the
@@ -200,7 +209,7 @@ def fetch_sansay_json(args, report_name, errors=None):
 
             if response.status_code == 200:
                 try:
-                    return response.json()
+                    data = response.json()
                 except ValueError as e:
                     # A 200 carrying a truncated or non-JSON body (device under
                     # load, proxy error page). Keep a snippet: it is the only
@@ -208,6 +217,13 @@ def fetch_sansay_json(args, report_name, errors=None):
                     last_error = (
                         f"invalid JSON in response ({e}); "
                         f"first 200 bytes: {response.text[:200]!r}"
+                    )
+                else:
+                    if is_usable is None or is_usable(data):
+                        return data
+                    last_error = (
+                        "response carried no tables "
+                        f"(first 200 bytes: {response.text[:200]!r})"
                     )
             else:
                 last_error = f"HTTP {response.status_code} {response.reason}"
@@ -267,7 +283,7 @@ def poll_sansay_vsx(args):
         else:
             stats["trunks"] = trunks
 
-    realtime_data = fetch_sansay_json(args, "realtime", errors)
+    realtime_data = fetch_sansay_json(args, "realtime", errors, is_usable=_has_report_tables)
     if realtime_data is not None:
         realtime_system_data, realtime_trunk_data = process_realtime_data(args, realtime_data)
         if "system_stat" in realtime_system_data:

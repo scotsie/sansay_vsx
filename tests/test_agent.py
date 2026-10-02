@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 from cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx import (
     AGENT_ERROR_KEY,
     ERRORS_KEY,
+    _has_report_tables,
     agent_sansay_vsx_main,
     fetch_sansay_json,
     process_media_stats,
@@ -764,6 +765,73 @@ class TestFetchRetries:
             result = fetch_sansay_json(make_fetch_args(retries=0), "realtime", errors)
         assert result is None
         assert "502 Proxy Error" in errors["realtime"]
+
+    def test_http_400_is_retried(self):
+        """Clustered pairs are polled twice per cycle; the device 400s the loser of the race."""
+        errors = {}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = [
+                _response(status_code=400, reason="Bad Request"),
+                _response(json_data={"ok": True}),
+            ]
+            result = fetch_sansay_json(make_fetch_args(), "realtime", errors)
+        assert result == {"ok": True}
+        assert errors == {}
+
+    def test_empty_tables_response_is_retried_and_succeeds(self):
+        """A 200 with no tables used to be returned as a success on the first attempt."""
+        errors = {}
+        empty = {"mysqldump": {"database": {}}}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = [_response(json_data=empty), _response(json_data=REALTIME_DATA)]
+            result = fetch_sansay_json(
+                make_fetch_args(), "realtime", errors, is_usable=_has_report_tables
+            )
+        assert result == REALTIME_DATA
+        assert get.call_count == 2
+        assert errors == {}
+
+    def test_empty_tables_response_records_reason_after_attempts_exhausted(self):
+        errors = {}
+        empty = {"mysqldump": {"database": {}}}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.return_value = _response(json_data=empty, text='{"mysqldump": {"database": {}}}')
+            result = fetch_sansay_json(
+                make_fetch_args(retries=2), "realtime", errors, is_usable=_has_report_tables
+            )
+        assert result is None
+        assert get.call_count == 3
+        assert "no tables" in errors["realtime"]
+        assert "3 attempt(s)" in errors["realtime"]
+
+    def test_empty_tables_response_accepted_without_usability_check(self):
+        """resource and media_server are not validated, so their behaviour is unchanged."""
+        errors = {}
+        empty = {"mysqldump": {"database": {}}}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.return_value = _response(json_data=empty)
+            result = fetch_sansay_json(make_fetch_args(), "resource", errors)
+        assert result == empty
+        assert get.call_count == 1
+
+    def test_poll_recovers_from_empty_realtime_response(self):
+        empty = {"mysqldump": {"database": {}}}
+        with patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.requests.get") as get, \
+             patch("cmk_addons.plugins.sansay_vsx.special_agents.agent_sansay_vsx.time.sleep"):
+            get.side_effect = [
+                _response(json_data=RESOURCE_DATA),
+                _response(json_data=empty),
+                _response(json_data=REALTIME_DATA),
+                _response(json_data={}),
+            ]
+            result = poll_sansay_vsx(make_fetch_args())
+        assert get.call_count == 4
+        assert "system_stat" in result
+        assert "realtime" not in result[ERRORS_KEY]
 
 
 # ---------------------------------------------------------------------------
