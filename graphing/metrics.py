@@ -5,7 +5,7 @@
 
 # License: GNU General Public License v2
 
-from cmk.graphing.v1.metrics import Color, DecimalNotation, Metric, StrictPrecision, Title, Unit, Product
+from cmk.graphing.v1.metrics import Color, DecimalNotation, Metric, StrictPrecision, Title, Unit
 from cmk.graphing.v1.graphs import Graph
 
 unit_percent = Unit(
@@ -52,16 +52,6 @@ metric_sansay_session_utilization_avg = Metric(
     color=Color.CYAN,
 )
 
-metric_sansay_session_utilization_trend = Product(
-    title=Title("Session Utilization Trend"),
-    unit=unit_percent,
-    color=Color.YELLOW,
-    factors=[
-        "session_utilization",
-        "session_utilization_drop",
-    ],
-)
-
 
 metric_sansay_num_active_sessions = Metric(
     name="num_active_sessions",
@@ -85,7 +75,7 @@ graph_sansay_vsx_system = Graph(
     title=Title("Sansay VSX System Metrics"),
     simple_lines=[
         "cpu_utilization",
-        "metric_sansay_session_utilization_trend",
+        "session_utilization_avg",
     ],
     compound_lines=[
         "session_utilization",
