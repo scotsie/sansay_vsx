@@ -15,7 +15,7 @@
                                   'sansay_vsx/special_agents/agent_sansay_vsx.py']},
  'name': 'sansay_vsx',
  'title': 'Sansay VSX Special Agent',
- 'version': '2.4.16',
+ 'version': '2.4.17',
  'version.min_required': '2.4.0p1',
- 'version.packaged': '2.5.0p15',
+ 'version.packaged': '2.5.0p19',
  'version.usable_until': None}

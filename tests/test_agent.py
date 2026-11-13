@@ -102,30 +102,44 @@ REALTIME_DATA = {
                         {
                             "field": [
                                 _field("trunkId", "100"),
-                                _field("fqdn", "carrier.example.com"),
-                                _field("numOrig", "3"),
-                                _field("numTerm", "5"),
-                                _field("cps", "1"),
-                                _field("numPeak", "8"),
-                                _field("totalCLZ", "0"),
+                                _field("fqdn", "4.55.8.225"),
+                                _field("numOrig", "0"),
+                                _field("numTerm", "2"),
+                                _field("cps", "0"),
+                                _field("numPeak", "2"),
+                                _field("totalCLZ", "2"),
                                 _field("numCLZCps", "0"),
-                                _field("totalLimit", "100"),
-                                _field("cpsLimit", "10"),
+                                _field("totalLimit", "2000"),
+                                _field("cpsLimit", "50"),
                             ]
                         },
-                        # Group-type entries should be filtered out
                         {
                             "field": [
-                                _field("trunkId", "GROUP-1"),
+                                _field("trunkId", "100"),
+                                _field("fqdn", "4.55.43.97"),
+                                _field("numOrig", "226"),
+                                _field("numTerm", "0"),
+                                _field("cps", "4"),
+                                _field("numPeak", "332"),
+                                _field("totalCLZ", "226"),
+                                _field("numCLZCps", "4"),
+                                _field("totalLimit", "2000"),
+                                _field("cpsLimit", "50"),
+                            ]
+                        },
+                        # Group-type entry (aggregate stats for the trunk, should be the one used)
+                        {
+                            "field": [
+                                _field("trunkId", "100"),
                                 _field("fqdn", "Group"),
-                                _field("numOrig", "3"),
-                                _field("numTerm", "5"),
-                                _field("cps", "0"),
-                                _field("numPeak", "0"),
-                                _field("totalCLZ", "0"),
-                                _field("numCLZCps", "0"),
-                                _field("totalLimit", "0"),
-                                _field("cpsLimit", "0"),
+                                _field("numOrig", "463"),
+                                _field("numTerm", "2"),
+                                _field("cps", "11"),
+                                _field("numPeak", "627"),
+                                _field("totalCLZ", "465"),
+                                _field("numCLZCps", "11"),
+                                _field("totalLimit", "4000"),
+                                _field("cpsLimit", "50"),
                             ]
                         },
                     ],
@@ -258,11 +272,14 @@ class TestProcessRealtimeData:
         assert "system_stat" in system_stat
         assert "100" in trunk_data
 
-    def test_group_fqdn_entries_are_filtered(self):
+    def test_group_fqdn_entries_are_kept(self):
+        """Only 'Group' entries (aggregate stats) should be included; per-IP entries should be filtered."""
         _, trunk_data = process_realtime_data(make_args(), REALTIME_DATA)
-        assert "GROUP-1" not in trunk_data
-        for data in trunk_data.values():
-            assert data.get("fqdn") != "Group"
+        assert "100" in trunk_data
+        assert trunk_data["100"]["fqdn"] == "Group"
+        # Verify we got the aggregate stats, not the per-IP stats
+        assert int(trunk_data["100"]["numOrig"]) == 463
+        assert int(trunk_data["100"]["cps"]) == 11
 
     def test_system_stat_fields_present(self):
         system_stat, _ = process_realtime_data(make_args(), REALTIME_DATA)

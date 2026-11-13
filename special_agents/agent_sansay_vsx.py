@@ -455,8 +455,11 @@ def process_realtime_data(args, data):
                         LOGGER.warning("Skipping realtime row with no field data: %s", row)
                         continue
                     realtime_row_dict = {fieldrow["name"]: fieldrow["content"] for fieldrow in fields}
-                    # Ignore realtime trunk data that has the FQDN noted as a group
-                    if realtime_row_dict.get("fqdn") == "Group":
+                    # Only include realtime trunk data where FQDN is 'Group' (aggregate stats).
+                    # When load-balancing is in use, multiple rows exist with the same trunkId:
+                    # one 'Group' entry with aggregate stats for all IPs, and per-IP entries.
+                    # We must use the aggregate 'Group' entry to get accurate trunk-wide metrics.
+                    if realtime_row_dict.get("fqdn") != "Group":
                         continue
                     trunk_id = realtime_row_dict.get("trunkId")
                     if trunk_id is None:
